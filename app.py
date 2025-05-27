@@ -301,11 +301,13 @@ def main():
         # ==== 导出并自动下载 ====
         df = pd.DataFrame(all_scores)
         csv = df.to_csv(index=False, encoding="utf-8-sig")
+        csv_bytes = csv.encode('utf-8-sig')  # 👈 添加这行确保 BOM
+        b64 = base64.b64encode(csv_bytes).decode()
 
-        b64 = base64.b64encode(csv.encode()).decode()
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         href = f'<a href="data:file/csv;base64,{b64}" download="评分结果_{timestamp}.csv">📥 点击下载评分表</a>'
         st.markdown(href, unsafe_allow_html=True)
+
 
 
 # 启动
