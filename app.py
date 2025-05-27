@@ -3,6 +3,7 @@ import pandas as pd
 import json
 import re
 from datetime import datetime
+import base64
 
 # ========== 工具函数 ==========
 def render_latex_textblock(text):
@@ -210,7 +211,6 @@ def render_part3_scoring(item, poid):
 # ========== 主程序入口 ==========
 def main():
 
-
     # 加载数据
     with open("test_ques.json", "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -298,11 +298,14 @@ def main():
                 }
                 all_scores.append(row)
 
-        # ==== 导出 ====
+        # ==== 导出并自动下载 ====
         df = pd.DataFrame(all_scores)
-        filename = f"scores_all_parts_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-        df.to_csv(filename, index=False, encoding="utf-8-sig")
-        st.success(f"所有评分结果已保存为：{filename}")
+        csv = df.to_csv(index=False, encoding="utf-8-sig")
+
+        b64 = base64.b64encode(csv.encode()).decode()
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        href = f'<a href="data:file/csv;base64,{b64}" download="评分结果_{timestamp}.csv">📥 点击下载评分表</a>'
+        st.markdown(href, unsafe_allow_html=True)
 
 
 # 启动
