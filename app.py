@@ -109,10 +109,9 @@ def display_part3(part3_list, poid):
 # ========== 评分表单的函数 ==========
 
 def render_part1_scoring(poid: str):
-    #st.markdown("### 📝 Part 1 评分表单")
-    st.markdown("请对以下指标进行打分：")
-
+    teacher_id = st.session_state.teacher_id
     models = ["模型A", "模型B", "模型C"]
+    model_keys = ["A", "B", "C"]
     dimensions = {
         "语言流畅（1-10）": "slider_int",
         "是否指出知识点（0,1）": "radio",
@@ -124,34 +123,32 @@ def render_part1_scoring(poid: str):
         "提问质量（高质量提问比例0~1）": "slider_float"
     }
 
-    if "part1_scores" not in st.session_state:
-        st.session_state.part1_scores = {}
-
+    scores = st.session_state.all_scores[teacher_id].setdefault("part1_scores", {})
     part1_key = f"part1_{poid}"
-    if part1_key not in st.session_state.part1_scores:
-        st.session_state.part1_scores[part1_key] = {}
+    scores.setdefault(part1_key, {})
 
     for dim, control_type in dimensions.items():
         st.markdown(f"**{dim}**")
         cols = st.columns(3)
+        scores[part1_key].setdefault(dim, {})
+
         for i, model in enumerate(models):
             key = f"{part1_key}_{dim}_{model}"
-            prev_value = st.session_state.part1_scores[part1_key].get(dim, {}).get(model, 0)
+            prev_value = scores[part1_key][dim].get(model_keys[i], 0)
 
             if control_type == "slider_int":
-                val = cols[i].slider(f"{model}", 0, 10, int(prev_value), step=1, key=key)
+                val = cols[i].slider(model, 0, 10, int(prev_value), step=1, key=key)
             elif control_type == "slider_float":
-                val = cols[i].slider(f"{model}", 0.0, 1.0, float(prev_value), step=0.1, key=key)
+                val = cols[i].slider(model, 0.0, 1.0, float(prev_value), step=0.1, key=key)
             elif control_type == "radio":
-                val = cols[i].radio(f"{model}", [0, 1], index=int(prev_value), horizontal=True, key=key)
+                val = cols[i].radio(model, [0, 1], index=int(prev_value), horizontal=True, key=key)
             else:
-                val = 0  # fallback
+                val = 0
 
-            st.session_state.part1_scores[part1_key].setdefault(dim, {})[model] = val
+            scores[part1_key][dim][model_keys[i]] = val
 
 def render_part2_scoring(part2_list, poid):
-    #st.markdown("### 📝 Part 2 评分表单")
-
+    teacher_id = st.session_state.teacher_id
     models = ["A", "B", "C"]
     type_map = {
         1: "引导质量（0=未引导，1=成功引导）",
@@ -164,8 +161,7 @@ def render_part2_scoring(part2_list, poid):
         3: [0, 0.5, 1]
     }
 
-    if "part2_scores" not in st.session_state:
-        st.session_state.part2_scores = {}
+    scores = st.session_state.all_scores[teacher_id].setdefault("part2_scores", {})
 
     for idx, block in enumerate(part2_list):
         block_type = block["type"]
@@ -173,19 +169,19 @@ def render_part2_scoring(part2_list, poid):
         st.markdown(f"**{type_map[block_type]}**")
         cols = st.columns(3)
 
-        if block_key not in st.session_state.part2_scores:
-            st.session_state.part2_scores[block_key] = {}
+        scores.setdefault(block_key, {})
 
         for i, model in enumerate(models):
             key = f"{block_key}_{model}"
-            prev_value = st.session_state.part2_scores[block_key].get(model, type_options[block_type][0])
-            val = cols[i].radio(f"{model}", type_options[block_type], index=type_options[block_type].index(prev_value), horizontal=True, key=key)
-            st.session_state.part2_scores[block_key][model] = val
+            prev_value = scores[block_key].get(model, type_options[block_type][0])
+            val = cols[i].radio(model, type_options[block_type], index=type_options[block_type].index(prev_value), horizontal=True, key=key)
+            scores[block_key][model] = val
+
 
 def render_part3_scoring(item, poid):
+    teacher_id = st.session_state.teacher_id
     models = ["A", "B", "C"]
-    if "part3_scores" not in st.session_state:
-        st.session_state.part3_scores = {}
+    scores = st.session_state.all_scores[teacher_id].setdefault("part3_scores", {})
 
     score_labels = [
         "是否回答了学生的问题（0=否，1=是）",
@@ -197,24 +193,55 @@ def render_part3_scoring(item, poid):
         st.markdown(f"**{label}**")
         cols = st.columns(3)
 
-        if score_key not in st.session_state.part3_scores:
-            st.session_state.part3_scores[score_key] = {}
+        scores.setdefault(score_key, {})
 
         for i, model in enumerate(models):
             key = f"{score_key}_{model}"
-            prev_value = st.session_state.part3_scores[score_key].get(model, 0)
-            val = cols[i].radio(f"{model}", [0, 1], index=prev_value, horizontal=True, key=key)
-            st.session_state.part3_scores[score_key][model] = val
+            prev_value = scores[score_key].get(model, 0)
+            val = cols[i].radio(model, [0, 1], index=prev_value, horizontal=True, key=key)
+            scores[score_key][model] = val
+
 
 
 
 # ========== 主程序入口 ==========
 def main():
+    # ========== 入口页：教师编号输入 ==========
+    if "teacher_id" not in st.session_state:
+        st.title("教师标注系统")
+        st.markdown("请输入您的教师编号（例如 T001）：")
+        teacher_input = st.text_input("教师编号", "")
+        if st.button("开始标注") and teacher_input.strip():
+            st.session_state.teacher_id = teacher_input.strip().upper()
+            st.rerun()
+        return  # 停在编号页
 
-    # 加载数据
-    with open("test_ques.json", "r", encoding="utf-8") as f:
-        data = json.load(f)
+    teacher_id = st.session_state.teacher_id
 
+    if "all_scores" not in st.session_state:
+        st.session_state.all_scores = {}
+
+    # 初始化当前教师的评分记录（隔离）
+    if teacher_id not in st.session_state.all_scores:
+        st.session_state.all_scores[teacher_id] = {
+            "part1_scores": {},
+            "part2_scores": {},
+            "part3_scores": {}
+        }
+
+    # ========== 加载数据：每位教师一个 JSON ==========
+    file_path = f"data_{teacher_id}.json"
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        st.error(f"未找到编号 {teacher_id} 对应的数据文件：`{file_path}`。请联系管理员。")
+        if st.button("重新输入编号"):
+            del st.session_state.teacher_id
+            st.rerun()
+        return
+
+    # ========== 页面导航 ==========
     total_pages = len(data)
     if "page" not in st.session_state:
         st.session_state.page = 0
@@ -225,7 +252,6 @@ def main():
     current = data[idx]
     poid = current.get("poid", f"id_{idx}")
 
-    # 页面导航
     col1, col2, col3 = st.columns([1, 2, 1])
     with col1:
         if st.button("上一条") and idx > 0:
@@ -236,7 +262,7 @@ def main():
             st.session_state.page += 1
             st.rerun()
 
-    # 显示信息
+    # ========== 展示任务内容 ==========
     st.markdown(f"### 第 {idx + 1} / {total_pages} 条样本")
     st.markdown(f"**样本 ID：** {poid}")
 
@@ -244,34 +270,40 @@ def main():
     display_part2(current["content"]["part2"], poid)
     display_part3(current["content"]["part3"], poid)
 
-
-    # 导出功能
+    # ========== 导出按钮 ==========
     if st.button("导出所有评分结果"):
+        teacher_scores = st.session_state.all_scores.get(teacher_id, {})
         all_scores = []
 
         # ==== Part1 ====
-        for k, v in st.session_state.get("part1_scores", {}).items():
+        for k, v in teacher_scores.get("part1_scores", {}).items():
             poid = k.replace("part1_", "")
             for dim, models in v.items():
+                score_a = models.get("A", "")
+                score_b = models.get("B", "")
+                score_c = models.get("C", "")
+                if score_a == "" and score_b == "" and score_c == "":
+                    continue
                 row = {
                     "poid": poid,
                     "part": "part1",
                     "type": dim,
                     "dimension": dim,
-                    "score_A": models.get("A", ""),
-                    "score_B": models.get("B", ""),
-                    "score_C": models.get("C", "")
+                    "score_A": score_a,
+                    "score_B": score_b,
+                    "score_C": score_c
                 }
                 all_scores.append(row)
 
         # ==== Part2 ====
-        for k, v in st.session_state.get("part2_scores", {}).items():
+        for k, v in teacher_scores.get("part2_scores", {}).items():
             part_match = re.match(r"part2_(.*?)_t(\d)_(\d+)", k)
             if part_match:
-                poid, tval, block_idx = part_match.groups()
+                poid_raw, tval, block_idx = part_match.groups()
                 label = f"type{tval}_block{block_idx}"
+                poid_clean = poid_raw.split("_")[0]  # 去掉 _idx 部分，保留 poid
                 row = {
-                    "poid": poid,
+                    "poid": poid_clean,
                     "part": "part2",
                     "type": label,
                     "dimension": "引导质量" if tval in ["1", "2"] else "导正话题",
@@ -281,8 +313,9 @@ def main():
                 }
                 all_scores.append(row)
 
+
         # ==== Part3 ====
-        for k, v in st.session_state.get("part3_scores", {}).items():
+        for k, v in teacher_scores.get("part3_scores", {}).items():
             part_match = re.match(r"part3_(.*?)_(.*?)_score(\d)", k)
             if part_match:
                 poid, qid, score_type = part_match.groups()
@@ -298,16 +331,20 @@ def main():
                 }
                 all_scores.append(row)
 
-        # ==== 导出并自动下载 ====
         df = pd.DataFrame(all_scores)
         csv = df.to_csv(index=False, encoding="utf-8-sig")
-        csv_bytes = csv.encode('utf-8-sig')  # 👈 添加这行确保 BOM
-        b64 = base64.b64encode(csv_bytes).decode()
-
+        b64 = base64.b64encode(csv.encode("utf-8-sig")).decode()
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        href = f'<a href="data:file/csv;base64,{b64}" download="评分结果_{timestamp}.csv">📥 点击下载评分表</a>'
+        filename = f"评分结果_{teacher_id}_{timestamp}.csv"
+        href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">📥 点击下载评分表</a>'
         st.markdown(href, unsafe_allow_html=True)
 
+
+    # ========== 附加操作 ==========
+    st.markdown("---")
+    if st.button("切换教师编号"):
+        del st.session_state.teacher_id
+        st.rerun()
 
 
 # 启动
