@@ -252,15 +252,28 @@ def main():
     current = data[idx]
     poid = current.get("poid", f"id_{idx}")
 
+        # 页面导航（顶部 + 跳转）
     col1, col2, col3 = st.columns([1, 2, 1])
     with col1:
-        if st.button("上一条") and idx > 0:
+        if st.button("上一条", key="top_prev") and idx > 0:
             st.session_state.page -= 1
             st.rerun()
+
+    with col2:
+        sub_col1, sub_col2, sub_col3 = st.columns([1, 3, 2])
+        with sub_col2:
+            with st.form(key="jump_form"):
+                jump_page = st.number_input("跳转到第几条（从 1 开始）", min_value=1, max_value=total_pages, value=idx + 1, step=1, key="jump_input")
+                submitted = st.form_submit_button("跳转")
+                if submitted:
+                    st.session_state.page = jump_page - 1
+                    st.rerun()
+
     with col3:
-        if st.button("下一条") and idx < total_pages - 1:
+        if st.button("下一条", key="top_next") and idx < total_pages - 1:
             st.session_state.page += 1
             st.rerun()
+
 
     # ========== 展示任务内容 ==========
     st.markdown(f"### 第 {idx + 1} / {total_pages} 条样本")
@@ -269,6 +282,19 @@ def main():
     display_part1(current["content"]["part1"], poid)
     display_part2(current["content"]["part2"], poid)
     display_part3(current["content"]["part3"], poid)
+
+
+    # ========== 底部也要操作 ==========
+    st.markdown("---")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col1:
+        if st.button("上一条", key="bottom_prev") and idx > 0:
+            st.session_state.page -= 1
+            st.rerun()
+    with col3:
+        if st.button("下一条", key="bottom_next") and idx < total_pages - 1:
+            st.session_state.page += 1
+            st.rerun()
 
     # ========== 导出按钮 ==========
     if st.button("导出所有评分结果"):
@@ -339,12 +365,6 @@ def main():
         href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">📥 点击下载评分表</a>'
         st.markdown(href, unsafe_allow_html=True)
 
-
-    # ========== 附加操作 ==========
-    st.markdown("---")
-    if st.button("切换教师编号"):
-        del st.session_state.teacher_id
-        st.rerun()
 
 
 # 启动
