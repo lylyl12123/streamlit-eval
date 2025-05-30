@@ -1,3 +1,4 @@
+import random
 import streamlit as st
 import pandas as pd
 import json
@@ -31,58 +32,67 @@ def display_part1(part1, poid):
     st.markdown("**题目：**")
     render_latex_textblock(part1["question"])
 
-    st.markdown("#### 📊 模型 A / B / C 对话对齐展示")
+    st.markdown("#### 📊 模型 1 / 2 / 3 对话对齐展示")
 
-    models = ["A", "B", "C"]
-    turns = [part1[model] for model in models]
+    model_map = st.session_state.model_shuffle_map[st.session_state.page]
+    model_keys = [model_map[m] for m in ["1", "2", "3"]]
+    model_names = ["1", "2", "3"]
+    turns = [part1[m] for m in model_keys]
 
-    # 计算最大轮数（补空用）
     max_len = max(len(t) for t in turns)
     for t in turns:
         while len(t) < max_len:
-            t.append({})  # 补空字典
+            t.append({})
 
     col_a, col_b, col_c = st.columns(3)
     for i in range(max_len):
         with col_a:
-            render_turn(turns[0][i], "A")
+            render_turn(turns[0][i], model_names[0])
         with col_b:
-            render_turn(turns[1][i], "B")
+            render_turn(turns[1][i], model_names[1])
         with col_c:
-            render_turn(turns[2][i], "C")
+            render_turn(turns[2][i], model_names[2])
 
-    #这里是评分表单
     render_part1_scoring(poid)
+
     
 def display_part2(part2_list, poid):
     st.markdown("### 🧪 Part 2: 不同学生反馈场景")
     type_map = {1: "✅ 理解（do）", 2: "❌ 不理解（don’t）", 3: "💬 无关回答（noise）"}
+
+    model_map = st.session_state.model_shuffle_map[st.session_state.page]
+    model_keys = [model_map[m] for m in ["1", "2", "3"]]
+    model_names = ["1", "2", "3"]
 
     for idx, block in enumerate(part2_list):
         st.markdown(f"#### {type_map[block['type']]} 类型")
         st.markdown("**题目：**")
         render_latex_textblock(block["question"])
 
-        models = ["A", "B", "C"]
-        turns = [block["content"][m] for m in models]
+        turns = [block["content"][m] for m in model_keys]
         max_len = max(len(t) for t in turns)
         for t in turns:
             while len(t) < max_len:
-                t.append({})  # 补空
+                t.append({})
 
         col_a, col_b, col_c = st.columns(3)
         for i in range(max_len):
             with col_a:
-                render_turn(turns[0][i], "A")
+                render_turn(turns[0][i], model_names[0])
             with col_b:
-                render_turn(turns[1][i], "B")
+                render_turn(turns[1][i], model_names[1])
             with col_c:
-                render_turn(turns[2][i], "C")
+                render_turn(turns[2][i], model_names[2])
         render_part2_scoring([block], f"{poid}_idx{idx}")
-    
 
+    
 def display_part3(part3_list, poid):
     st.markdown("### 🎯 Part 3: 单轮反馈能力评估")
+
+    model_map = st.session_state.model_shuffle_map[st.session_state.page]
+    model_keys = [model_map[m] for m in ["1", "2", "3"]]
+    model_names = ["1", "2", "3"]
+
     for item in part3_list:
         st.markdown(f"**类型：** {item['type']}")
         st.markdown("**题目：**")
@@ -92,26 +102,29 @@ def display_part3(part3_list, poid):
 
         col_a, col_b, col_c = st.columns(3)
         with col_a:
-            st.markdown("**模型 A 回复：**")
-            render_latex_textblock(item["single_dialog"]["model_response_A"])
+            st.markdown(f"**{model_names[0]} 回复：**")
+            render_latex_textblock(item["single_dialog"][f"model_response_{model_keys[0]}"])
         with col_b:
-            st.markdown("**模型 B 回复：**")
-            render_latex_textblock(item["single_dialog"]["model_response_B"])
+            st.markdown(f"**{model_names[1]} 回复：**")
+            render_latex_textblock(item["single_dialog"][f"model_response_{model_keys[1]}"])
         with col_c:
-            st.markdown("**模型 C 回复：**")
-            render_latex_textblock(item["single_dialog"]["model_response_C"])
+            st.markdown(f"**{model_names[2]} 回复：**")
+            render_latex_textblock(item["single_dialog"][f"model_response_{model_keys[2]}"])
 
         st.markdown("**教师参考回复：**")
         render_latex_textblock(item["single_dialog"]["gt"])
 
         render_part3_scoring(item, poid)
 
+
 # ========== 评分表单的函数 ==========
 
 def render_part1_scoring(poid: str):
     teacher_id = st.session_state.teacher_id
-    models = ["模型A", "模型B", "模型C"]
-    model_keys = ["A", "B", "C"]
+    model_names = ["1", "2", "3"]
+    model_map = st.session_state.model_shuffle_map[st.session_state.page]
+    model_keys = [model_map[m] for m in model_names]
+
     dimensions = {
         "语言流畅（1-10）": "slider_int",
         "是否指出知识点（0,1）": "radio",
@@ -132,24 +145,28 @@ def render_part1_scoring(poid: str):
         cols = st.columns(3)
         scores[part1_key].setdefault(dim, {})
 
-        for i, model in enumerate(models):
-            key = f"{part1_key}_{dim}_{model}"
+        for i, model_name in enumerate(model_names):
+            key = f"{part1_key}_{dim}_{model_name}"
             prev_value = scores[part1_key][dim].get(model_keys[i], 0)
 
             if control_type == "slider_int":
-                val = cols[i].slider(model, 0, 10, int(prev_value), step=1, key=key)
+                val = cols[i].slider(model_name, 0, 10, int(prev_value), step=1, key=key)
             elif control_type == "slider_float":
-                val = cols[i].slider(model, 0.0, 1.0, float(prev_value), step=0.1, key=key)
+                val = cols[i].slider(model_name, 0.0, 1.0, float(prev_value), step=0.1, key=key)
             elif control_type == "radio":
-                val = cols[i].radio(model, [0, 1], index=int(prev_value), horizontal=True, key=key)
+                val = cols[i].radio(model_name, [0, 1], index=int(prev_value), horizontal=True, key=key)
             else:
                 val = 0
 
             scores[part1_key][dim][model_keys[i]] = val
 
+
 def render_part2_scoring(part2_list, poid):
     teacher_id = st.session_state.teacher_id
-    models = ["A", "B", "C"]
+    model_names = ["1", "2", "3"]
+    model_map = st.session_state.model_shuffle_map[st.session_state.page]
+    model_keys = [model_map[m] for m in model_names]
+
     type_map = {
         1: "引导质量（0=未引导，1=成功引导）",
         2: "引导质量（0=未引导，1=成功引导）",
@@ -171,16 +188,20 @@ def render_part2_scoring(part2_list, poid):
 
         scores.setdefault(block_key, {})
 
-        for i, model in enumerate(models):
-            key = f"{block_key}_{model}"
-            prev_value = scores[block_key].get(model, type_options[block_type][0])
-            val = cols[i].radio(model, type_options[block_type], index=type_options[block_type].index(prev_value), horizontal=True, key=key)
-            scores[block_key][model] = val
+        for i, model_name in enumerate(model_names):
+            key = f"{block_key}_{model_name}"
+            prev_value = scores[block_key].get(model_keys[i], type_options[block_type][0])
+            val = cols[i].radio(model_name, type_options[block_type],
+                                index=type_options[block_type].index(prev_value), horizontal=True, key=key)
+            scores[block_key][model_keys[i]] = val
 
 
 def render_part3_scoring(item, poid):
     teacher_id = st.session_state.teacher_id
-    models = ["A", "B", "C"]
+    model_names = ["1", "2", "3"]
+    model_map = st.session_state.model_shuffle_map[st.session_state.page]
+    model_keys = [model_map[m] for m in model_names]
+
     scores = st.session_state.all_scores[teacher_id].setdefault("part3_scores", {})
 
     score_labels = [
@@ -195,11 +216,12 @@ def render_part3_scoring(item, poid):
 
         scores.setdefault(score_key, {})
 
-        for i, model in enumerate(models):
-            key = f"{score_key}_{model}"
-            prev_value = scores[score_key].get(model, 0)
-            val = cols[i].radio(model, [0, 1], index=prev_value, horizontal=True, key=key)
-            scores[score_key][model] = val
+        for i, model_name in enumerate(model_names):
+            key = f"{score_key}_{model_name}"
+            prev_value = scores[score_key].get(model_keys[i], 0)
+            val = cols[i].radio(model_name, [0, 1],
+                                index=int(prev_value), horizontal=True, key=key)
+            scores[score_key][model_keys[i]] = val
 
 
 
@@ -251,6 +273,16 @@ def main():
     idx = st.session_state.page
     current = data[idx]
     poid = current.get("poid", f"id_{idx}")
+
+    # 初始化模型顺序混淆
+    if "model_shuffle_map" not in st.session_state:
+        st.session_state.model_shuffle_map = {}
+
+    if idx not in st.session_state.model_shuffle_map:
+        shuffled = ["A", "B", "C"]
+        random.shuffle(shuffled)
+        st.session_state.model_shuffle_map[idx] = dict(zip(["1", "2", "3"], shuffled))
+
 
         # 页面导航（顶部 + 跳转）
     col1, col2, col3 = st.columns([1, 2, 1])
