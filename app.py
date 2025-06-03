@@ -7,6 +7,8 @@ from datetime import datetime
 import base64
 
 # ========== 工具函数 ==========
+
+#渲染文本
 def render_latex_textblock(text):
     pattern = re.compile(r"(\${1,2}.*?\${1,2})")
     parts = pattern.split(text)
@@ -18,22 +20,30 @@ def render_latex_textblock(text):
             result += part.replace("\n", "<br>")  # 处理换行
     st.markdown(result, unsafe_allow_html=True)
 
-
+#渲染对话轮
 def render_turn(turn: dict, model_name: str):
     if "model_respond" in turn:
-        st.markdown(f"**模型 {model_name}：**")
+        st.markdown(f"模型 {model_name}：")
         render_latex_textblock(turn["model_respond"])
     if "user" in turn:
-        st.markdown(f"**学生：**")
+        st.markdown(f"学生：")
         render_latex_textblock(turn["user"])
+
+
+#渲染竖分割线
+def render_vertical_divider():
+    st.markdown("""
+        <div style='height: 75px; border-left: 1px solid lightgray; margin: auto 0;'>&nbsp;</div>
+    """, unsafe_allow_html=True)
+
 
 # ========== 展示布局的函数 ==========
 def display_part1(part1, poid):
-    st.markdown("### 🧩 Part 1: 模型完整对话")
+    st.markdown("### 🧩 Part 1: 模型答疑中的整体评价")
     st.markdown("**题目：**")
     render_latex_textblock(part1["question"])
 
-    st.markdown("#### 📊 模型 1 / 2 / 3 对话对齐展示")
+    st.markdown("#### 📊 模型 1 / 2 / 3 对该问题的答疑过程")
 
     model_map = st.session_state.model_shuffle_map[st.session_state.page]
     model_keys = [model_map[m] for m in ["1", "2", "3"]]
@@ -46,24 +56,50 @@ def display_part1(part1, poid):
             t.append({})
 
     col_a, col_b, col_c = st.columns(3)
-    for i in range(max_len):
-        with col_a:
-            render_turn(turns[0][i], model_names[0])
-        with col_b:
-            render_turn(turns[1][i], model_names[1])
-        with col_c:
-            render_turn(turns[2][i], model_names[2])
+
+    scroll_box_style = """
+        <div style='border: 1px solid #ccc; border-radius: 10px; padding: 10px; height: 500px; overflow-y: auto; background-color: #f9f9f9;'>
+            {content}
+        </div>
+    """
+
+    def render_scrollable_dialog(turns, model_name):
+        rendered = []
+        for i, turn in enumerate(turns):
+            # 跳过第一轮的 user 发言（和题目重复）
+            if i != 0 and "user" in turn:
+                rendered.append(f"**学生：**")
+                rendered.append(turn["user"])
+            if "model_respond" in turn:
+                rendered.append(f"**{model_name}：**")
+                rendered.append(turn["model_respond"])
+        html = "<br><br>".join([f"<p>{t}</p>" if not t.startswith("**") else f"<b>{t}</b>" for t in rendered])
+        return scroll_box_style.format(content=html)
+
+    with col_a:
+        st.markdown(f"**{model_names[0]}**")
+        st.markdown(render_scrollable_dialog(turns[0], model_names[0]), unsafe_allow_html=True)
+
+    with col_b:
+        st.markdown(f"**{model_names[1]}**")
+        st.markdown(render_scrollable_dialog(turns[1], model_names[1]), unsafe_allow_html=True)
+
+    with col_c:
+        st.markdown(f"**{model_names[2]}**")
+        st.markdown(render_scrollable_dialog(turns[2], model_names[2]), unsafe_allow_html=True)
+
 
     # ========== 显示答案 ========== 
     if "answer" in part1:
-        st.markdown("#### ✅ 正确答案")
-        render_latex_textblock(part1["answer"])
+        render_latex_textblock("##### ✅ 该题正确答案："+part1["answer"])
 
     render_part1_scoring(poid)
 
-    
+    st.markdown("<div style='height: 100px;'></div>", unsafe_allow_html=True)
+
+
 def display_part2(part2_list, poid):
-    st.markdown("### 🧪 Part 2: 不同学生反馈场景")
+    st.markdown("### 🧪 Part 2: 模型在引导解题和引导话题上的评价")
     type_map = {1: "✅ 理解（do）", 2: "❌ 不理解（don’t）", 3: "💬 无关回答（noise）"}
 
     model_map = st.session_state.model_shuffle_map[st.session_state.page]
@@ -73,18 +109,26 @@ def display_part2(part2_list, poid):
     for idx, block in enumerate(part2_list):
         st.markdown(f"#### {type_map[block['type']]} 类型")
 
-        # 展示各模型的题干
-        col_a, col_b, col_c = st.columns(3)
-        for col, key, name in zip([col_a, col_b, col_c], model_keys, model_names):
-            with col:
-                st.markdown(f"**模型 {name} 的题目：**")
-                model_data = block["content"][key]
-                if isinstance(model_data, dict) and "question" in model_data:
-                    render_latex_textblock(model_data["question"])
-                else:
-                    render_latex_textblock(block.get("question", "（无题目）"))  # 向后兼容
+        # === 展示题干，带分隔线 ===
+        col_a, col_mid1, col_b, col_mid2, col_c = st.columns([1, 0.03, 1, 0.03, 1])
+        with col_a:
+            st.markdown(f"**模型 {model_names[0]} 的题目：**")
+            model_data = block["content"][model_keys[0]]
+            render_latex_textblock(model_data.get("question", "（无题目）"))
+        with col_mid1:
+            render_vertical_divider()
+        with col_b:
+            st.markdown(f"**模型 {model_names[1]} 的题目：**")
+            model_data = block["content"][model_keys[1]]
+            render_latex_textblock(model_data.get("question", "（无题目）"))
+        with col_mid2:
+            render_vertical_divider()
+        with col_c:
+            st.markdown(f"**模型 {model_names[2]} 的题目：**")
+            model_data = block["content"][model_keys[2]]
+            render_latex_textblock(model_data.get("question", "（无题目）"))
 
-        # 构造对话 turns
+        # === 构造对话 turns ===
         turns = []
         for key in model_keys:
             model_data = block["content"][key]
@@ -98,19 +142,25 @@ def display_part2(part2_list, poid):
             while len(t) < max_len:
                 t.append({})
 
-        col_a, col_b, col_c = st.columns(3)
+        # === 展示对话内容，带分隔线 ===
+        col_a, col_mid1, col_b, col_mid2, col_c = st.columns([1, 0.03, 1, 0.03, 1])
         for i in range(max_len):
             with col_a:
                 render_turn(turns[0][i], model_names[0])
+            with col_mid1:
+                render_vertical_divider()
             with col_b:
                 render_turn(turns[1][i], model_names[1])
+            with col_mid2:
+                render_vertical_divider()
             with col_c:
                 render_turn(turns[2][i], model_names[2])
 
         render_part2_scoring([block], f"{poid}_idx{idx}")
 
+        st.markdown("<div style='height: 50px;'></div>", unsafe_allow_html=True)
 
-    
+
 def display_part3(part3_list, poid):
     st.markdown("### 🎯 Part 3: 单轮反馈能力评估")
 
@@ -125,15 +175,20 @@ def display_part3(part3_list, poid):
         st.markdown("**学生：**")
         render_latex_textblock(item["single_dialog"]["user"])
 
-        col_a, col_b, col_c = st.columns(3)
+        # === 模型回复三栏 + 分隔线 ===
+        col_a, col_mid1, col_b, col_mid2, col_c = st.columns([1, 0.03, 1, 0.03, 1])
         with col_a:
-            st.markdown(f"**{model_names[0]} 回复：**")
+            st.markdown(f"**模型 {model_names[0]} 回复：**")
             render_latex_textblock(item["single_dialog"][f"model_response_{model_keys[0]}"])
+        with col_mid1:
+            render_vertical_divider()
         with col_b:
-            st.markdown(f"**{model_names[1]} 回复：**")
+            st.markdown(f"**模型 {model_names[1]} 回复：**")
             render_latex_textblock(item["single_dialog"][f"model_response_{model_keys[1]}"])
+        with col_mid2:
+            render_vertical_divider()
         with col_c:
-            st.markdown(f"**{model_names[2]} 回复：**")
+            st.markdown(f"**模型 {model_names[2]} 回复：**")
             render_latex_textblock(item["single_dialog"][f"model_response_{model_keys[2]}"])
 
         st.markdown("**教师参考回复：**")
@@ -141,16 +196,18 @@ def display_part3(part3_list, poid):
 
         render_part3_scoring(item, poid)
 
+        st.markdown("<div style='height: 100px;'></div>", unsafe_allow_html=True)
+
+
 
 # ========== 评分表单的函数 ==========
 
 def render_part1_scoring(poid: str):
     teacher_id = st.session_state.teacher_id
-    model_names = ["1", "2", "3"]
+    model_names = ["模型1", "模型2", "模型3"]
     model_map = st.session_state.model_shuffle_map[st.session_state.page]
-    model_keys = [model_map[m] for m in model_names]
+    model_keys = [model_map[str(i)] for i in range(1, 4)]
 
-    # 简洁字段名
     dimensions = {
         "语言流畅度": "slider_int",
         "是否指出知识点": "radio",
@@ -161,7 +218,6 @@ def render_part1_scoring(poid: str):
         "提问质量": "slider_float"
     }
 
-    # 每项说明
     descriptions = {
         "语言流畅度": "请为上面对话中模型的语言流畅度打分，满分（10）的标准为语言符合语法、表达简洁准确、清晰易懂。",
         "是否指出知识点": "在与学生对话的过程中，模型是否有明显地告知学生该题目涉及的知识点，如有则选择1，无则选择0.",
@@ -176,34 +232,56 @@ def render_part1_scoring(poid: str):
     part1_key = f"part1_{poid}"
     scores.setdefault(part1_key, {})
 
-    for dim, control_type in dimensions.items():
-        st.markdown(f"**{dim}**")
-        st.markdown(f"<span style='font-size:90%'>{descriptions[dim]}</span>", unsafe_allow_html=True)
+    render_latex_textblock("###### 请根据以上内容，根据下列维度评分：")
 
-        cols = st.columns(3)
-        scores[part1_key].setdefault(dim, {})
+    for i, (dim, control_type) in enumerate(dimensions.items(), start=1):
+        scores[part1_key].setdefault(dim, {})  # ✅ 加上这句，确保不 KeyError
 
-        for i, model_name in enumerate(model_names):
+        st.markdown(f"<span style='font-size: 18px; font-weight: bold;'>（{i}） {dim}</span>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size: 16px; padding-left: 1em;'>{descriptions[dim]}</div>", unsafe_allow_html=True)
+
+        cols = st.columns([1, 0.05, 1, 0.05, 1])
+        # 分别是 col_a, col_div1, col_b, col_div2, col_c
+        for i, (col, model_name) in enumerate(zip([cols[0], cols[2], cols[4]], model_names)):
             key = f"{part1_key}_{dim}_{model_name}"
             prev_value = scores[part1_key][dim].get(model_keys[i], 0)
 
-            if control_type == "slider_int":
-                val = cols[i].slider(model_name, 0, 10, int(prev_value), step=1, key=key)
-            elif control_type == "slider_float":
-                val = cols[i].slider(model_name, 0.0, 1.0, float(prev_value), step=0.1, key=key)
-            elif control_type == "radio":
-                val = cols[i].radio(model_name, [0, 1], index=int(prev_value), horizontal=True, key=key)
-            else:
-                val = 0
-
+            with col:
+                subcol1, subcol2 = st.columns([1, 2])
+                with subcol1:
+                    st.markdown(
+                        f"<div style='text-align: center; padding-top: 0.5rem; font-weight: bold;'>{model_name}</div>",
+                        unsafe_allow_html=True
+                    )
+                with subcol2:
+                    if control_type == "slider_int":
+                        st.markdown("<style>div[data-baseweb='slider'] { max-width: 130px; }</style>", unsafe_allow_html=True)
+                        val = st.slider("", 0, 10, int(prev_value), step=1, key=key)
+                    elif control_type == "slider_float":
+                        st.markdown("<style>div[data-baseweb='slider'] { max-width: 130px; }</style>", unsafe_allow_html=True)
+                        val = st.slider("", 0.0, 1.0, float(prev_value), step=0.1, key=key)
+                    elif control_type == "radio":
+                        st.markdown("<div style='text-align: center;'>", unsafe_allow_html=True)
+                        val = st.radio("", [0, 1], index=int(prev_value), horizontal=True, key=key)
+                        st.markdown("</div>", unsafe_allow_html=True)
+                    else:
+                        val = 0
             scores[part1_key][dim][model_keys[i]] = val
+
+        # 插入竖线
+        with cols[1]:
+            render_vertical_divider()
+        with cols[3]:
+            render_vertical_divider()
+
+
 
 
 def render_part2_scoring(part2_list, poid):
     teacher_id = st.session_state.teacher_id
-    model_names = ["1", "2", "3"]
+    model_names = ["模型1", "模型2", "模型3"]
     model_map = st.session_state.model_shuffle_map[st.session_state.page]
-    model_keys = [model_map[m] for m in model_names]
+    model_keys = [model_map[str(i)] for i in range(1, 4)]
 
     type_map = {
         1: "引导质量（理解）",
@@ -217,11 +295,10 @@ def render_part2_scoring(part2_list, poid):
         3: [0, 0.5, 1]
     }
 
-    # 维度说明文字
     description_map = {
-        "引导质量（理解）": "判断模型是否能根据学生的理解/不理解进行适当引导。有效引导的定义为：在学生表示理解的情况下，当前轮对话对比上一轮对话应在逻辑上推进问题的解决，推动到下一个步骤或更深的推理。若当前轮对话没有逻辑推进，则认为引导质量为0；如果有推进，则引导质量为1。",
-        "引导质量（不理解）": "判断模型是否能根据学生的理解/不理解进行适当引导。有效引导的定义为：在学生表示不理解的情况下，当前轮对话应对比上一轮对话增加新的内容，如提供更多的解释、示例或提示，帮助学生更好地理解问题。如果当前轮对话仅仅重复了上一轮的讲解内容而没有提供新的帮助，则引导质量为0；如果提供了新的帮助，表示引导质量较高，则引导质量为1。",
-        "导正话题": "判断模型是否能在学生答非所问时将话题拉回问题本身。如果模型顺着学生的无关话题回答，则为0分；如果模型没有拉回学生注意，自顾自继续讲解，则为0.5分；如果能拉回学生注意力并继续讲解，则为1分。"
+        "引导质量（理解）": "    判断模型是否能根据学生的理解/不理解进行适当引导。有效引导的定义为：在学生表示理解的情况下，当前轮对话对比上一轮对话应在逻辑上推进问题的解决，推动到下一个步骤或更深的推理。若当前轮对话没有逻辑推进，则认为引导质量为0；如果有推进，则引导质量为1。",
+        "引导质量（不理解）": "    判断模型是否能根据学生的理解/不理解进行适当引导。有效引导的定义为：在学生表示不理解的情况下，当前轮对话应对比上一轮对话增加新的内容，如提供更多的解释、示例或提示，帮助学生更好地理解问题。",
+        "导正话题": "    判断模型是否能在学生答非所问时将话题拉回问题本身。如果模型顺着学生的无关话题向下，则为0；如果模型无视学生无关发言，直接继续讲解，则为0.5；如果模型引导学生话题回到题目上，并继续讲解，则为1分。"
     }
 
     scores = st.session_state.all_scores[teacher_id].setdefault("part2_scores", {})
@@ -231,42 +308,66 @@ def render_part2_scoring(part2_list, poid):
         label = type_map[block_type]
         block_key = f"part2_{poid}_t{block_type}_{idx}"
 
-        # 🌟 展示维度和说明
-        st.markdown(f"**{label}**")
-        st.markdown(f"<span style='font-size:90%'>{description_map.get(label, '')}</span>", unsafe_allow_html=True)
+        # === 标题（编号） ===
+        st.markdown(f"<div style='font-size:18px; font-weight: bold;'>（{block_type}） {label}</div>", unsafe_allow_html=True)
 
-        cols = st.columns(3)
+        # === 描述（加大字体 + 缩进） ===
+        st.markdown(
+            f"<div style='font-size: 16px; padding-left: 1em; color: #555;'>{description_map.get(label, '')}</div>",
+            unsafe_allow_html=True
+        )
+
+        # === 布局：带分割线 ===
+        cols = st.columns([1, 0.05, 1, 0.05, 1])
         scores.setdefault(block_key, {})
 
-        for i, model_name in enumerate(model_names):
+        for i, (col, model_name) in enumerate(zip([cols[0], cols[2], cols[4]], model_names)):
             key = f"{block_key}_{model_name}"
             prev_value = scores[block_key].get(model_keys[i], type_options[block_type][0])
-            val = cols[i].radio(model_name, type_options[block_type],
-                                index=type_options[block_type].index(prev_value), horizontal=True, key=key)
+
+            with col:
+                subcol1, subcol2 = st.columns([1, 2])
+                with subcol1:
+                    st.markdown(
+                        f"<div style='text-align: center; padding-top: 0.3rem; font-weight: bold;'>{model_name}</div>",
+                        unsafe_allow_html=True
+                    )
+                with subcol2:
+                    st.markdown("<div style='text-align: center;'>", unsafe_allow_html=True)
+                    val = st.radio("", type_options[block_type],
+                                   index=type_options[block_type].index(prev_value),
+                                   horizontal=True, key=key)
+                    st.markdown("</div>", unsafe_allow_html=True)
+
             scores[block_key][model_keys[i]] = val
+
+        # === 插入分隔竖线 ===
+        with cols[1]:
+            render_vertical_divider()
+        with cols[3]:
+            render_vertical_divider()
 
 
 def render_part3_scoring(item, poid):
     teacher_id = st.session_state.teacher_id
-    model_names = ["1", "2", "3"]
+    model_names = ["模型1", "模型2", "模型3"]
     model_map = st.session_state.model_shuffle_map[st.session_state.page]
-    model_keys = [model_map[m] for m in model_names]
+    model_keys = [model_map[str(i)] for i in range(1, 4)]
 
     scores = st.session_state.all_scores[teacher_id].setdefault("part3_scores", {})
 
-    # 类型对应维度与描述
     type_labels_map = {
         "correct": [
-            ("正确理解", "判断模型是否指出学生是回答是正确的，如“你说得对”“回答得很好”等。是则选择1，否则选择0。"),
-            ("正确反馈", "判断模型是否引导学生进行下一步，或是总结正确答案。是则选择1，否则选择0。")
+            ("正确理解", "判断模型是否指出学生是回答是正确的，如“你说得对”“回答得很好”等。"),
+            ("正确反馈", "判断模型是否引导学生进行下一步，或是总结正确答案。")
         ],
         "error": [
-            ("正确理解", "判断模型是否正面指出学生的回答是错误的。是则选择1，否则选择0。"),
-            ("正确反馈", "判断模型是否正确地改正了学生错误。是则选择1，否则选择0。")
+            ("正确理解", "判断模型是否正面指出学生的回答是错误的。"),
+            ("正确反馈", "判断模型是否正确地改正了学生错误。")
         ],
         "question": [
-            ("正确理解", "判断模型是否回答学生的问题。是则选择1，否则选择0。"),
-            ("正确反馈", "判断模型是否正确回答学生提问。是则选择1，否则选择0。")
+            ("正确理解", "判断模型是否回答学生的问题。"),
+            ("正确反馈", "判断模型是否正确回答学生提问。")
         ],
     }
 
@@ -275,18 +376,49 @@ def render_part3_scoring(item, poid):
 
     for score_type, (label, desc) in enumerate(label_pairs):
         score_key = f"part3_{poid}_{item['question_id']}_score{score_type}"
-        st.markdown(f"**{label}**")
-        st.markdown(f"<span style='font-size:90%'>{desc}</span>", unsafe_allow_html=True)
 
-        cols = st.columns(3)
+        # === 维度标题加编号 ===
+        st.markdown(f"<div style='font-size: 18px; font-weight: bold;'>（{score_type + 1}） {label}</div>", unsafe_allow_html=True)
+
+        # === 描述文字样式优化 ===
+        st.markdown(
+            f"<div style='font-size: 16px; padding-left: 1em; color: #555;'>{desc}</div>",
+            unsafe_allow_html=True
+        )
+
+        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+
+        # === 模型评分：三栏分隔 + 竖线 ===
+        cols = st.columns([1, 0.05, 1, 0.05, 1])
         scores.setdefault(score_key, {})
 
-        for i, model_name in enumerate(model_names):
+        for i, (col, model_name) in enumerate(zip([cols[0], cols[2], cols[4]], model_names)):
             key = f"{score_key}_{model_name}"
             prev_value = scores[score_key].get(model_keys[i], 0)
-            val = cols[i].radio(model_name, [0, 1],
-                                index=int(prev_value), horizontal=True, key=key)
+
+            with col:
+                subcol1, subcol2 = st.columns([1, 2])
+                with subcol1:
+                    st.markdown(
+                        f"<div style='text-align: center; padding-top: 0.3rem; font-weight: bold;'>{model_name}</div>",
+                        unsafe_allow_html=True
+                    )
+                with subcol2:
+                    st.markdown("<div style='text-align: center;'>", unsafe_allow_html=True)
+                    val = st.radio("", [0, 1],
+                                   index=int(prev_value), horizontal=True, key=key)
+                    st.markdown("</div>", unsafe_allow_html=True)
+
             scores[score_key][model_keys[i]] = val
+
+        # === 插入分隔竖线 ===
+        with cols[1]:
+            render_vertical_divider()
+        with cols[3]:
+            render_vertical_divider()
+
+
+
 
 
 
@@ -297,10 +429,10 @@ def render_part3_scoring(item, poid):
 def main():
     # ========== 入口页：教师编号输入 ==========
     if "teacher_id" not in st.session_state:
-        st.title("教师标注系统")
+        st.title("智能答疑教师评估系统")
         st.markdown("请输入您的教师编号（例如 T001）：")
         teacher_input = st.text_input("教师编号", "")
-        if st.button("开始标注") and teacher_input.strip():
+        if st.button("开始评估") and teacher_input.strip():
             st.session_state.teacher_id = teacher_input.strip().upper()
             st.rerun()
         return  # 停在编号页
@@ -506,10 +638,22 @@ def main():
         st.markdown(href, unsafe_allow_html=True)
 
 
-
 # 启动
 if __name__ == "__main__":
     st.set_page_config(layout="wide")
+
+    # 样式
+    st.markdown("""
+        <style>
+            .model-box {
+                background-color: #f7f7f7;
+                border: 1px solid #ddd;
+                border-radius: 10px;
+                padding: 0.75rem 1rem;
+                margin-bottom: 0.5rem;
+            }
+        </style>
+    """, unsafe_allow_html=True)
 
     st.markdown("""
         <style>
