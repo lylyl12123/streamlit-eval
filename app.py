@@ -10,13 +10,14 @@ import base64
 def render_latex_textblock(text):
     pattern = re.compile(r"(\${1,2}.*?\${1,2})")
     parts = pattern.split(text)
+    result = ""
     for part in parts:
-        if part.startswith("$$") and part.endswith("$$"):
-            st.latex(part.strip("$"))
-        elif part.startswith("$") and part.endswith("$"):
-            st.latex(part.strip("$"))
+        if part.startswith("$$") or part.startswith("$"):
+            result += part  # 保留 $ 符号，用于 markdown 渲染
         else:
-            st.markdown(part)
+            result += part.replace("\n", "<br>")  # 处理换行
+    st.markdown(result, unsafe_allow_html=True)
+
 
 def render_turn(turn: dict, model_name: str):
     if "model_respond" in turn:
@@ -36,7 +37,7 @@ def display_part1(part1, poid):
 
     model_map = st.session_state.model_shuffle_map[st.session_state.page]
     model_keys = [model_map[m] for m in ["1", "2", "3"]]
-    model_names = ["1", "2", "3"]
+    model_names = ["模型1", "模型2", "模型3"]
     turns = [part1[m] for m in model_keys]
 
     max_len = max(len(t) for t in turns)
@@ -53,6 +54,11 @@ def display_part1(part1, poid):
         with col_c:
             render_turn(turns[2][i], model_names[2])
 
+    # ========== 显示答案 ========== 
+    if "answer" in part1:
+        st.markdown("#### ✅ 正确答案")
+        render_latex_textblock(part1["answer"])
+
     render_part1_scoring(poid)
 
     
@@ -66,10 +72,27 @@ def display_part2(part2_list, poid):
 
     for idx, block in enumerate(part2_list):
         st.markdown(f"#### {type_map[block['type']]} 类型")
-        st.markdown("**题目：**")
-        render_latex_textblock(block["question"])
 
-        turns = [block["content"][m] for m in model_keys]
+        # 展示各模型的题干
+        col_a, col_b, col_c = st.columns(3)
+        for col, key, name in zip([col_a, col_b, col_c], model_keys, model_names):
+            with col:
+                st.markdown(f"**模型 {name} 的题目：**")
+                model_data = block["content"][key]
+                if isinstance(model_data, dict) and "question" in model_data:
+                    render_latex_textblock(model_data["question"])
+                else:
+                    render_latex_textblock(block.get("question", "（无题目）"))  # 向后兼容
+
+        # 构造对话 turns
+        turns = []
+        for key in model_keys:
+            model_data = block["content"][key]
+            if isinstance(model_data, dict) and "dialogue" in model_data:
+                turns.append(model_data["dialogue"])
+            else:
+                turns.append(model_data)  # 向后兼容旧格式
+
         max_len = max(len(t) for t in turns)
         for t in turns:
             while len(t) < max_len:
@@ -83,7 +106,9 @@ def display_part2(part2_list, poid):
                 render_turn(turns[1][i], model_names[1])
             with col_c:
                 render_turn(turns[2][i], model_names[2])
+
         render_part2_scoring([block], f"{poid}_idx{idx}")
+
 
     
 def display_part3(part3_list, poid):
@@ -125,15 +150,26 @@ def render_part1_scoring(poid: str):
     model_map = st.session_state.model_shuffle_map[st.session_state.page]
     model_keys = [model_map[m] for m in model_names]
 
+    # 简洁字段名
     dimensions = {
-        "语言流畅（1-10）": "slider_int",
-        "是否指出知识点（0,1）": "radio",
-        "知识点内容是否正确（0,1）": "radio",
-        "最终答案正确（0,1）": "radio",
-        "部分答案正确（0,1）": "radio",
-        "过程正确（0~1，步长0.1）": "slider_float",
-        "是否分步讲解（0,1）": "radio",
-        "提问质量（高质量提问比例0~1）": "slider_float"
+        "语言流畅度": "slider_int",
+        "是否指出知识点": "radio",
+        "知识点内容是否正确": "radio",
+        "最终答案正确": "radio",
+        "过程正确": "slider_float",
+        "是否分步讲解": "radio",
+        "提问质量": "slider_float"
+    }
+
+    # 每项说明
+    descriptions = {
+        "语言流畅度": "请为上面对话中模型的语言流畅度打分，满分（10）的标准为语言符合语法、表达简洁准确、清晰易懂。",
+        "是否指出知识点": "在与学生对话的过程中，模型是否有明显地告知学生该题目涉及的知识点，如有则选择1，无则选择0.",
+        "知识点内容是否正确": "请判断对话中提及的知识点、概念描述是否都是正确的？是则选择1，否则选择0",
+        "最终答案正确": "请判断对话中，模型给学生提供的最终答案是否正确？（如果对话还没推进到最终答案，则视为没有给出最终答案）是则选择1，否则选择0.",
+        "过程正确": "请判断模型在逐步讲解的过程中，过程正确的部分大致占比多少？比如，如果在讲解中大致正确了一半，或是在一个有两个小问的题目中正确了一个小问，则分数为0.5。",
+        "是否分步讲解": "请判断对话中，模型是否遵循了分步骤对学生进行讲解的原则(每次对话对学生进行下一步的引导)，对学生进行逐步的讲解？是则选择1；如果并未逐步讲解，而是直接给出结果，则选择0.",
+        "提问质量": "请你判断在讲解过程中，模型对学生提出的高质量问题的比例大致有多少？类似于“你明白了吗？”“你理解了吗？”等没有给出具体信息的内容，视为低质量提问；有具体引导学生进行下一步计算或者下一个推导步骤的，如“请你试着完成计算”“那么下一步是不是应该...？”视为高质量提问。"
     }
 
     scores = st.session_state.all_scores[teacher_id].setdefault("part1_scores", {})
@@ -142,6 +178,8 @@ def render_part1_scoring(poid: str):
 
     for dim, control_type in dimensions.items():
         st.markdown(f"**{dim}**")
+        st.markdown(f"<span style='font-size:90%'>{descriptions[dim]}</span>", unsafe_allow_html=True)
+
         cols = st.columns(3)
         scores[part1_key].setdefault(dim, {})
 
@@ -168,24 +206,36 @@ def render_part2_scoring(part2_list, poid):
     model_keys = [model_map[m] for m in model_names]
 
     type_map = {
-        1: "引导质量（0=未引导，1=成功引导）",
-        2: "引导质量（0=未引导，1=成功引导）",
-        3: "导正话题（0=偏离话题，0.5=忽略但继续讲题，1=纠正话题）"
+        1: "引导质量（理解）",
+        2: "引导质量（不理解）",
+        3: "导正话题"
     }
+
     type_options = {
         1: [0, 1],
         2: [0, 1],
         3: [0, 0.5, 1]
     }
 
+    # 维度说明文字
+    description_map = {
+        "引导质量（理解）": "判断模型是否能根据学生的理解/不理解进行适当引导。有效引导的定义为：在学生表示理解的情况下，当前轮对话对比上一轮对话应在逻辑上推进问题的解决，推动到下一个步骤或更深的推理。若当前轮对话没有逻辑推进，则认为引导质量为0；如果有推进，则引导质量为1。",
+        "引导质量（不理解）": "判断模型是否能根据学生的理解/不理解进行适当引导。有效引导的定义为：在学生表示不理解的情况下，当前轮对话应对比上一轮对话增加新的内容，如提供更多的解释、示例或提示，帮助学生更好地理解问题。如果当前轮对话仅仅重复了上一轮的讲解内容而没有提供新的帮助，则引导质量为0；如果提供了新的帮助，表示引导质量较高，则引导质量为1。",
+        "导正话题": "判断模型是否能在学生答非所问时将话题拉回问题本身。如果模型顺着学生的无关话题回答，则为0分；如果模型没有拉回学生注意，自顾自继续讲解，则为0.5分；如果能拉回学生注意力并继续讲解，则为1分。"
+    }
+
     scores = st.session_state.all_scores[teacher_id].setdefault("part2_scores", {})
 
     for idx, block in enumerate(part2_list):
         block_type = block["type"]
+        label = type_map[block_type]
         block_key = f"part2_{poid}_t{block_type}_{idx}"
-        st.markdown(f"**{type_map[block_type]}**")
-        cols = st.columns(3)
 
+        # 🌟 展示维度和说明
+        st.markdown(f"**{label}**")
+        st.markdown(f"<span style='font-size:90%'>{description_map.get(label, '')}</span>", unsafe_allow_html=True)
+
+        cols = st.columns(3)
         scores.setdefault(block_key, {})
 
         for i, model_name in enumerate(model_names):
@@ -204,16 +254,31 @@ def render_part3_scoring(item, poid):
 
     scores = st.session_state.all_scores[teacher_id].setdefault("part3_scores", {})
 
-    score_labels = [
-        "是否回答了学生的问题（0=否，1=是）",
-        "是否正确回答了学生的问题（0=否，1=是）"
-    ]
+    # 类型对应维度与描述
+    type_labels_map = {
+        "correct": [
+            ("正确理解", "判断模型是否指出学生是回答是正确的，如“你说得对”“回答得很好”等。是则选择1，否则选择0。"),
+            ("正确反馈", "判断模型是否引导学生进行下一步，或是总结正确答案。是则选择1，否则选择0。")
+        ],
+        "error": [
+            ("正确理解", "判断模型是否正面指出学生的回答是错误的。是则选择1，否则选择0。"),
+            ("正确反馈", "判断模型是否正确地改正了学生错误。是则选择1，否则选择0。")
+        ],
+        "question": [
+            ("正确理解", "判断模型是否回答学生的问题。是则选择1，否则选择0。"),
+            ("正确反馈", "判断模型是否正确回答学生提问。是则选择1，否则选择0。")
+        ],
+    }
 
-    for score_type, label in enumerate(score_labels):
+    current_type = item.get("type", "correct")
+    label_pairs = type_labels_map.get(current_type, type_labels_map["correct"])
+
+    for score_type, (label, desc) in enumerate(label_pairs):
         score_key = f"part3_{poid}_{item['question_id']}_score{score_type}"
         st.markdown(f"**{label}**")
-        cols = st.columns(3)
+        st.markdown(f"<span style='font-size:90%'>{desc}</span>", unsafe_allow_html=True)
 
+        cols = st.columns(3)
         scores.setdefault(score_key, {})
 
         for i, model_name in enumerate(model_names):
@@ -222,6 +287,8 @@ def render_part3_scoring(item, poid):
             val = cols[i].radio(model_name, [0, 1],
                                 index=int(prev_value), horizontal=True, key=key)
             scores[score_key][model_keys[i]] = val
+
+
 
 
 
@@ -337,6 +404,9 @@ def main():
         for k, v in teacher_scores.get("part1_scores", {}).items():
             poid = k.replace("part1_", "")
             for dim, models in v.items():
+                if dim not in ["语言流畅度", "是否指出知识点", "知识点内容是否正确",
+                               "最终答案正确", "过程正确", "是否分步讲解", "提问质量"]:
+                    continue  # 跳过非当前使用字段（如旧字段）
                 score_a = models.get("A", "")
                 score_b = models.get("B", "")
                 score_c = models.get("C", "")
@@ -353,18 +423,25 @@ def main():
                 }
                 all_scores.append(row)
 
+
         # ==== Part2 ====
+        type_map = {
+            "1": "引导质量（理解）",
+            "2": "引导质量（不理解）",
+            "3": "导正话题"
+        }
+
         for k, v in teacher_scores.get("part2_scores", {}).items():
             part_match = re.match(r"part2_(.*?)_t(\d)_(\d+)", k)
             if part_match:
                 poid_raw, tval, block_idx = part_match.groups()
-                label = f"type{tval}_block{block_idx}"
                 poid_clean = poid_raw.split("_")[0]  # 去掉 _idx 部分，保留 poid
+                label = f"{type_map.get(tval, '未知类型')}_block{block_idx}"
                 row = {
                     "poid": poid_clean,
                     "part": "part2",
                     "type": label,
-                    "dimension": "引导质量" if tval in ["1", "2"] else "导正话题",
+                    "dimension": type_map.get(tval, "未知类型"),
                     "score_A": v.get("A", ""),
                     "score_B": v.get("B", ""),
                     "score_C": v.get("C", "")
@@ -372,22 +449,53 @@ def main():
                 all_scores.append(row)
 
 
+
         # ==== Part3 ====
+        type_labels_map = {
+            "correct": [
+                "正确理解",
+                "正确反馈"
+            ],
+            "error": [
+                "正确理解",
+                "正确反馈"
+            ],
+            "question": [
+                "正确理解",
+                "正确反馈"
+            ]
+        }
+
         for k, v in teacher_scores.get("part3_scores", {}).items():
             part_match = re.match(r"part3_(.*?)_(.*?)_score(\d)", k)
             if part_match:
                 poid, qid, score_type = part_match.groups()
-                label = "是否回答学生问题" if score_type == "0" else "是否正确回答学生问题"
+                score_idx = int(score_type)
+
+                # 获取对话类型
+                q_type = "correct"
+                for sample in data:
+                    if sample.get("poid") == poid:
+                        for p3 in sample["content"].get("part3", []):
+                            if p3.get("question_id") == qid:
+                                q_type = p3.get("type", "correct")
+                                break
+
+                labels = type_labels_map.get(q_type, type_labels_map["correct"])
+                dimension_name = labels[score_idx] if score_idx < len(labels) else f"评分项{score_idx}"
+
                 row = {
                     "poid": poid,
                     "part": "part3",
-                    "type": f"score{score_type}",
-                    "dimension": label,
+                    "type": q_type,
+                    "dimension": dimension_name,
                     "score_A": v.get("A", ""),
                     "score_B": v.get("B", ""),
                     "score_C": v.get("C", "")
                 }
                 all_scores.append(row)
+
+
 
         df = pd.DataFrame(all_scores)
         csv = df.to_csv(index=False, encoding="utf-8-sig")
