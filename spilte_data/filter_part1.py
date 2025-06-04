@@ -48,9 +48,16 @@ if "page" not in st.session_state:
 qid = question_ids[st.session_state.page]
 entry = filtered_data[qid]
 
+# ========== 显示进度条 ==========
+progress_text = f"已完成 {st.session_state.page + 1} / {len(question_ids)} 条"
+st.markdown(f"**{progress_text}**")
+st.progress((st.session_state.page + 1) / len(question_ids))
+
 # ========== 显示内容 ==========
 st.markdown(f"### 📌 题目 ID： `{qid}`")
 st.markdown(f"**题目内容：**  \n{entry['DeepSeek-V3']['question']}")
+st.markdown(f"**答案：**  \n{entry['DeepSeek-V3'].get('answer', '（无答案）')}")
+
 
 cols = st.columns(3)
 for i, model in enumerate(["DeepSeek-V3", "o4-mini", "Spark_X1"]):
@@ -78,6 +85,12 @@ with col2:
     if st.button("➡️ 下一条") and st.session_state.page < len(question_ids) - 1:
         st.session_state.page += 1
         st.rerun()
+
+
+# ========== 已选条数显示 ==========
+selected_count = sum(st.session_state.selections.get(qid, False) for qid in question_ids)
+st.markdown(f"📊 已选择对话数：**{selected_count} / {len(question_ids)}**")
+
 
 # ========== 导出按钮 ==========
 st.markdown("---")

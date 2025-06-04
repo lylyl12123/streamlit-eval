@@ -209,6 +209,7 @@ def render_part1_scoring(poid: str):
     model_keys = [model_map[str(i)] for i in range(1, 4)]
 
     dimensions = {
+        "整体偏好排序（主观倾向）": "rank",
         "语言流畅度": "slider_int",
         "是否指出知识点": "radio",
         "知识点内容是否正确": "radio",
@@ -219,8 +220,9 @@ def render_part1_scoring(poid: str):
     }
 
     descriptions = {
+        "整体偏好排序（主观倾向）": "阅读以上三个模型的答疑对话后，假设你需要从中选择一个用于实际学生答疑，请根据你的主观判断，对这三个模型进行偏好排序（排在前面的表示你最倾向选择的模型）。",
         "语言流畅度": "请为上面对话中模型的语言流畅度打分，满分（10）的标准为语言符合语法、表达简洁准确、清晰易懂。",
-        "是否指出知识点": "在与学生对话的过程中，模型是否有明显地告知学生该题目涉及的知识点，如有则选择1，无则选择0.",
+        "是否指出知识点": "在与学生对话的过程中，模型是否有明显地告知学生该题目涉及的知识点,并且知识点正确，如有则选择1，无则选择0.",
         "知识点内容是否正确": "请判断对话中提及的知识点、概念描述是否都是正确的？是则选择1，否则选择0",
         "最终答案正确": "请判断对话中，模型给学生提供的最终答案是否正确？（如果对话还没推进到最终答案，则视为没有给出最终答案）是则选择1，否则选择0.",
         "过程正确": "请判断模型在逐步讲解的过程中，过程正确的部分大致占比多少？比如，如果在讲解中大致正确了一半，或是在一个有两个小问的题目中正确了一个小问，则分数为0.5。",
@@ -235,16 +237,28 @@ def render_part1_scoring(poid: str):
     render_latex_textblock("###### 请根据以上内容，根据下列维度评分：")
 
     for i, (dim, control_type) in enumerate(dimensions.items(), start=1):
-        scores[part1_key].setdefault(dim, {})  # ✅ 加上这句，确保不 KeyError
+        scores[part1_key].setdefault(dim, {})  # 防止 KeyError
 
         st.markdown(f"<span style='font-size: 18px; font-weight: bold;'>（{i}） {dim}</span>", unsafe_allow_html=True)
         st.markdown(f"<div style='font-size: 16px; padding-left: 1em;'>{descriptions[dim]}</div>", unsafe_allow_html=True)
 
+        if control_type == "rank":
+            options = model_names
+            default_order = model_names
+            selected = st.multiselect("请按偏好排序（从左到右表示从高到低）", options, default=default_order, key=f"{part1_key}_{dim}")
+            if len(selected) == 3:
+                for idx, mname in enumerate(selected):
+                    model_idx = model_names.index(mname)
+                    scores[part1_key][dim][model_keys[model_idx]] = 3 - idx
+            else:
+                for i in range(3):
+                    scores[part1_key][dim][model_keys[i]] = 0
+            continue  # 跳过后续控件布局
+
         cols = st.columns([1, 0.05, 1, 0.05, 1])
-        # 分别是 col_a, col_div1, col_b, col_div2, col_c
-        for i, (col, model_name) in enumerate(zip([cols[0], cols[2], cols[4]], model_names)):
+        for j, (col, model_name) in enumerate(zip([cols[0], cols[2], cols[4]], model_names)):
             key = f"{part1_key}_{dim}_{model_name}"
-            prev_value = scores[part1_key][dim].get(model_keys[i], 0)
+            prev_value = scores[part1_key][dim].get(model_keys[j], 0)
 
             with col:
                 subcol1, subcol2 = st.columns([1, 2])
@@ -266,13 +280,14 @@ def render_part1_scoring(poid: str):
                         st.markdown("</div>", unsafe_allow_html=True)
                     else:
                         val = 0
-            scores[part1_key][dim][model_keys[i]] = val
+                    scores[part1_key][dim][model_keys[j]] = val
 
         # 插入竖线
         with cols[1]:
             render_vertical_divider()
         with cols[3]:
             render_vertical_divider()
+
 
 
 
@@ -312,10 +327,8 @@ def render_part2_scoring(part2_list, poid):
         st.markdown(f"<div style='font-size:18px; font-weight: bold;'>（{block_type}） {label}</div>", unsafe_allow_html=True)
 
         # === 描述（加大字体 + 缩进） ===
-        st.markdown(
-            f"<div style='font-size: 16px; padding-left: 1em; color: #555;'>{description_map.get(label, '')}</div>",
-            unsafe_allow_html=True
-        )
+        st.markdown(f"<div style='font-size: 16px; padding-left: 1em;'>{description_map.get(label, '')}</div>", unsafe_allow_html=True)
+
 
         # === 布局：带分割线 ===
         cols = st.columns([1, 0.05, 1, 0.05, 1])
@@ -381,10 +394,8 @@ def render_part3_scoring(item, poid):
         st.markdown(f"<div style='font-size: 18px; font-weight: bold;'>（{score_type + 1}） {label}</div>", unsafe_allow_html=True)
 
         # === 描述文字样式优化 ===
-        st.markdown(
-            f"<div style='font-size: 16px; padding-left: 1em; color: #555;'>{desc}</div>",
-            unsafe_allow_html=True
-        )
+        st.markdown(f"<div style='font-size: 16px; padding-left: 1em;'>{desc}</div>", unsafe_allow_html=True)
+
 
         st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
 
@@ -515,18 +526,6 @@ def main():
     display_part3(current["content"]["part3"], poid)
 
 
-    # ========== 底部也要操作 ==========
-    st.markdown("---")
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col1:
-        if st.button("上一条", key="bottom_prev") and idx > 0:
-            st.session_state.page -= 1
-            st.rerun()
-    with col3:
-        if st.button("下一条", key="bottom_next") and idx < total_pages - 1:
-            st.session_state.page += 1
-            st.rerun()
-
     # ========== 导出按钮 ==========
     if st.button("导出所有评分结果"):
         teacher_scores = st.session_state.all_scores.get(teacher_id, {})
@@ -537,7 +536,8 @@ def main():
             poid = k.replace("part1_", "")
             for dim, models in v.items():
                 if dim not in ["语言流畅度", "是否指出知识点", "知识点内容是否正确",
-                               "最终答案正确", "过程正确", "是否分步讲解", "提问质量"]:
+               "最终答案正确", "过程正确", "是否分步讲解", "提问质量",
+               "整体偏好排序（主观倾向）"]:
                     continue  # 跳过非当前使用字段（如旧字段）
                 score_a = models.get("A", "")
                 score_b = models.get("B", "")
