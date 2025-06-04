@@ -48,54 +48,38 @@ def display_part1(part1, poid):
     model_map = st.session_state.model_shuffle_map[st.session_state.page]
     model_keys = [model_map[m] for m in ["1", "2", "3"]]
     model_names = ["模型1", "模型2", "模型3"]
-    turns = [part1[m] for m in model_keys]
-
-    max_len = max(len(t) for t in turns)
-    for t in turns:
-        while len(t) < max_len:
-            t.append({})
+    model_turns = [part1.get(k, []) for k in model_keys]
 
     col_a, col_b, col_c = st.columns(3)
+    for col, turns, name in zip([col_a, col_b, col_c], model_turns, model_names):
+        with col:
+            st.markdown(f"#### 🤖 {name}")
 
-    scroll_box_style = """
-        <div style='border: 1px solid #ccc; border-radius: 10px; padding: 10px; height: 500px; overflow-y: auto; background-color: #f9f9f9;'>
-            {content}
-        </div>
-    """
+            # 拼接 markdown 内容
+            blocks = []
+            for idx, turn in enumerate(turns):
+                if idx != 0 and "user" in turn:
+                    blocks.append("**学生：**\n" + turn["user"])
+                if "model_respond" in turn:
+                    blocks.append(f"**{name}：**\n" + turn["model_respond"])
+                blocks.append("---")
+            content = "\n\n".join(blocks)
 
-    def render_scrollable_dialog(turns, model_name):
-        rendered = []
-        for i, turn in enumerate(turns):
-            # 跳过第一轮的 user 发言（和题目重复）
-            if i != 0 and "user" in turn:
-                rendered.append(f"**学生：**")
-                rendered.append(turn["user"])
-            if "model_respond" in turn:
-                rendered.append(f"**{model_name}：**")
-                rendered.append(turn["model_respond"])
-        html = "<br><br>".join([f"<p>{t}</p>" if not t.startswith("**") else f"<b>{t}</b>" for t in rendered])
-        return scroll_box_style.format(content=html)
+            # 渲染可滚动区域（外层是 HTML 滚动，内层是 markdown 内容）
+            st.markdown(f"""
+<div style='height: 500px; overflow-y: auto; padding-right:10px; border: 1px solid #ccc; border-radius: 10px; padding: 10px; background-color: #f9f9f9;'>
+{content}
+</div>
+""", unsafe_allow_html=True)
 
-    with col_a:
-        st.markdown(f"**{model_names[0]}**")
-        st.markdown(render_scrollable_dialog(turns[0], model_names[0]), unsafe_allow_html=True)
-
-    with col_b:
-        st.markdown(f"**{model_names[1]}**")
-        st.markdown(render_scrollable_dialog(turns[1], model_names[1]), unsafe_allow_html=True)
-
-    with col_c:
-        st.markdown(f"**{model_names[2]}**")
-        st.markdown(render_scrollable_dialog(turns[2], model_names[2]), unsafe_allow_html=True)
-
-
-    # ========== 显示答案 ========== 
     if "answer" in part1:
-        render_latex_textblock("##### ✅ 该题正确答案："+part1["answer"])
+        render_latex_textblock("##### ✅ 该题正确答案：" + part1["answer"])
 
     render_part1_scoring(poid)
-
     st.markdown("<div style='height: 100px;'></div>", unsafe_allow_html=True)
+
+
+
 
 
 def display_part2(part2_list, poid):
