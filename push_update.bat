@@ -6,7 +6,7 @@ echo Current directory: %cd%
 git add .
 
 :: Commit with default message
-git commit -m "feat: update Part1 ranking export"
+git commit -m "feat: clean LaTeX and add real data"
 
 :: Push to main branch
 git push origin main

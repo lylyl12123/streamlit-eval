@@ -4,32 +4,34 @@ import openai
 from tqdm import tqdm
 
 # ==== 配置 ====
-
-
 client = openai.OpenAI(
     base_url="https://aihubmix.com/v1",
     api_key="sk-YQUM9TfwzbSs1Qfn08395e177a6547F6818f14Ba72DdCeBf"
 )
 
+REAL_MODELS = ["DeepSeek-V3", "o4-mini", "Spark_X1"]
 
 def fix_latex_with_api(text: str) -> str:
     prompt = f"""
-请将以下文本中所有非标准 LaTeX 数学表达式格式（如 \\(x\\)、(\\boxed{{0}})）转换为标准的 LaTeX 公式格式（$$...$$）。仅转换公式部分，保留原句其它内容不变。不要输出其他任何思考。
+        你是一个文本修复工具。你只允许修改数学公式的表示形式，其它任何字符、标点、换行都不允许修改。
+        请将以下文本中所有非标准 LaTeX 数学表达式格式（如 \\(x\\)、(\\boxed{{0}})）转换为标准的 LaTeX 公式格式（$$...$$）。
+        仅转换公式部分，**其它任何字符不得更改。**。不要输出其他任何思考。
 
-示例：
-原始：本题答案为 (\\boxed{{0}})。
-转换：本题答案为 $$\\boxed{{0}}$$。
+        示例：
+        原始：本题答案为 (\\boxed{{0}})。
+        转换：本题答案为 $$\\boxed{{0}}$$。
 
-原始内容如下：
-{text}
-"""
+        原始内容如下：
+        {text}
+        """
     try:
         completion = client.chat.completions.create(
             model="deepseek-ai/DeepSeek-V3-0324",
             messages=[{"role": "user", "content": prompt}],
             temperature=0
         )
-        print(completion.choices[0].message.content.strip())
+        print("原文：",text)
+        print("返回：", completion.choices[0].message.content.strip())
         return completion.choices[0].message.content.strip()
     except Exception as e:
         print("API 调用失败：", e)
@@ -42,26 +44,29 @@ def process_file(filename: str):
     for sample in tqdm(data, desc="处理中"):
         content = sample.get("content", {})
 
-        # part1 模型多轮对话
-        for model in ["A", "B", "C"]:
-            turns = content.get("part1", {}).get(model, [])
+        # === part1: 多轮对话 ===
+        part1 = content.get("part1", {})
+        for model in REAL_MODELS:
+            turns = part1.get(model, [])
             for turn in turns:
                 if "model_respond" in turn:
                     turn["model_respond"] = fix_latex_with_api(turn["model_respond"])
 
-        # part2 多轮单轮结构嵌套
+        # === part2: 嵌套结构 ===
         for item in content.get("part2", []):
-            for model in ["A", "B", "C"]:
-                dialogue = item["content"][model].get("dialogue", [])
+            inner = item.get("content", {})
+            for model in REAL_MODELS:
+                dialogue = inner.get(model, {}).get("dialogue", [])
                 for turn in dialogue:
                     if "model_respond" in turn:
                         turn["model_respond"] = fix_latex_with_api(turn["model_respond"])
 
-        # part3 单轮结构
+        # === part3: 单轮结构 ===
         for item in content.get("part3", []):
-            for key in ["model_response_A", "model_response_B", "model_response_C"]:
-                if key in item.get("single_dialog", {}):
-                    item["single_dialog"][key] = fix_latex_with_api(item["single_dialog"][key])
+            single_dialog = item.get("single_dialog", {})
+            for model in REAL_MODELS:
+                if model in single_dialog:
+                    single_dialog[model] = fix_latex_with_api(single_dialog[model])
 
     output_path = filename.replace(".json", "_fixed.json")
     with open(output_path, "w", encoding="utf-8") as f:

@@ -36,6 +36,8 @@ def render_vertical_divider():
         <div style='height: 75px; border-left: 1px solid lightgray; margin: auto 0;'>&nbsp;</div>
     """, unsafe_allow_html=True)
 
+real_keys = {"A": "DeepSeek-V3", "B": "o4-mini", "C": "Spark_X1"}
+
 
 # ========== 展示布局的函数 ==========
 def display_part1(part1, poid):
@@ -48,29 +50,28 @@ def display_part1(part1, poid):
     model_map = st.session_state.model_shuffle_map[st.session_state.page]
     model_keys = [model_map[m] for m in ["1", "2", "3"]]
     model_names = ["模型1", "模型2", "模型3"]
-    model_turns = [part1.get(k, []) for k in model_keys]
+    real_keys = {"A": "DeepSeek-V3", "B": "o4-mini", "C": "Spark_X1"}
+    model_turns = [part1.get(real_keys[k], []) for k in model_keys]
 
     col_a, col_b, col_c = st.columns(3)
     for col, turns, name in zip([col_a, col_b, col_c], model_turns, model_names):
         with col:
             st.markdown(f"#### 🤖 {name}")
-
-            # 拼接 markdown 内容
             blocks = []
+            blocks.append(" ")
             for idx, turn in enumerate(turns):
-                if idx != 0 and "user" in turn:
-                    blocks.append("**学生：**\n" + turn["user"])
+                if "user" in turn and idx != 0:
+                    blocks.append(f"<span style='color:#1f77b4; font-weight:bold;'>学生：</span><br>{turn['user']}")
                 if "model_respond" in turn:
-                    blocks.append(f"**{name}：**\n" + turn["model_respond"])
-                blocks.append("---")
+                    blocks.append(f"<span style='color:#d62728; font-weight:bold;'>{name}：</span><br>{turn['model_respond']}")
+                if idx < len(turns) - 1:
+                    blocks.append("---")
             content = "\n\n".join(blocks)
-
-            # 渲染可滚动区域（外层是 HTML 滚动，内层是 markdown 内容）
             st.markdown(f"""
-<div style='height: 500px; overflow-y: auto; padding-right:10px; border: 1px solid #ccc; border-radius: 10px; padding: 10px; background-color: #f9f9f9;'>
-{content}
-</div>
-""", unsafe_allow_html=True)
+            <div style='height: 500px; overflow-y: auto; padding-right:10px; border: 1px solid #ccc; border-radius: 10px; padding: 10px; background-color: #f9f9f9;'>
+            {content}
+            </div>
+            """, unsafe_allow_html=True)
 
     if "answer" in part1:
         render_latex_textblock("##### ✅ 该题正确答案：" + part1["answer"])
@@ -80,69 +81,70 @@ def display_part1(part1, poid):
 
 
 
-
-
 def display_part2(part2_list, poid):
     st.markdown("### 🧪 Part 2: 模型在引导解题和引导话题上的评价")
     type_map = {1: "✅ 理解（do）", 2: "❌ 不理解（don’t）", 3: "💬 无关回答（noise）"}
 
     model_map = st.session_state.model_shuffle_map[st.session_state.page]
     model_keys = [model_map[m] for m in ["1", "2", "3"]]
-    model_names = ["1", "2", "3"]
+    model_names = ["模型1", "模型2", "模型3"]
+    real_keys = {"A": "DeepSeek-V3", "B": "o4-mini", "C": "Spark_X1"}
 
     for idx, block in enumerate(part2_list):
         st.markdown(f"#### {type_map[block['type']]} 类型")
 
-        # === 展示题干，带分隔线 ===
+        # === 展示题干 ===
         col_a, col_mid1, col_b, col_mid2, col_c = st.columns([1, 0.03, 1, 0.03, 1])
         with col_a:
-            st.markdown(f"**模型 {model_names[0]} 的题目：**")
-            model_data = block["content"][model_keys[0]]
+            st.markdown(f"**{model_names[0]} 的题目：**")
+            model_data = block["content"][real_keys[model_keys[0]]]
             render_latex_textblock(model_data.get("question", "（无题目）"))
         with col_mid1:
             render_vertical_divider()
         with col_b:
-            st.markdown(f"**模型 {model_names[1]} 的题目：**")
-            model_data = block["content"][model_keys[1]]
+            st.markdown(f"**{model_names[1]} 的题目：**")
+            model_data = block["content"][real_keys[model_keys[1]]]
             render_latex_textblock(model_data.get("question", "（无题目）"))
         with col_mid2:
             render_vertical_divider()
         with col_c:
-            st.markdown(f"**模型 {model_names[2]} 的题目：**")
-            model_data = block["content"][model_keys[2]]
+            st.markdown(f"**{model_names[2]} 的题目：**")
+            model_data = block["content"][real_keys[model_keys[2]]]
             render_latex_textblock(model_data.get("question", "（无题目）"))
 
         # === 构造对话 turns ===
         turns = []
         for key in model_keys:
-            model_data = block["content"][key]
+            model_data = block["content"][real_keys[key]]
             if isinstance(model_data, dict) and "dialogue" in model_data:
                 turns.append(model_data["dialogue"])
             else:
-                turns.append(model_data)  # 向后兼容旧格式
+                turns.append(model_data)
 
-        max_len = max(len(t) for t in turns)
-        for t in turns:
-            while len(t) < max_len:
-                t.append({})
-
-        # === 展示对话内容，带分隔线 ===
+        # === 展示对话内容（滑动容器） ===
         col_a, col_mid1, col_b, col_mid2, col_c = st.columns([1, 0.03, 1, 0.03, 1])
-        for i in range(max_len):
-            with col_a:
-                render_turn(turns[0][i], model_names[0])
-            with col_mid1:
-                render_vertical_divider()
-            with col_b:
-                render_turn(turns[1][i], model_names[1])
-            with col_mid2:
-                render_vertical_divider()
-            with col_c:
-                render_turn(turns[2][i], model_names[2])
+        for col, t_list, name in zip([col_a, col_b, col_c], turns, model_names):
+            with col:
+                st.markdown(f"**{name} 的对话过程：**")
+                blocks = []
+                blocks.append(" ")
+                for i, turn in enumerate(t_list):
+                    if "user" in turn:
+                        blocks.append(f"<span style='color:#1f77b4; font-weight:bold;'>学生：</span><br>{turn['user']}")
+                    if "model_respond" in turn:
+                        blocks.append(f"<span style='color:#d62728; font-weight:bold;'>{name}：</span><br>{turn['model_respond']}")
+                    if i < len(t_list) - 1:
+                        blocks.append("---")
+                content = "\n\n".join(blocks)
+                st.markdown(f"""
+                <div style='height: 400px; overflow-y: auto; padding-right:10px; border: 1px solid #ccc; border-radius: 10px; padding: 10px; background-color: #f9f9f9;'>
+                {content}
+                </div>
+                """, unsafe_allow_html=True)
 
         render_part2_scoring([block], f"{poid}_idx{idx}")
-
         st.markdown("<div style='height: 50px;'></div>", unsafe_allow_html=True)
+
 
 
 def display_part3(part3_list, poid):
@@ -151,6 +153,7 @@ def display_part3(part3_list, poid):
     model_map = st.session_state.model_shuffle_map[st.session_state.page]
     model_keys = [model_map[m] for m in ["1", "2", "3"]]
     model_names = ["1", "2", "3"]
+    real_keys = {"A": "DeepSeek-V3", "B": "o4-mini", "C": "Spark_X1"}
 
     for item in part3_list:
         st.markdown(f"**类型：** {item['type']}")
@@ -159,27 +162,25 @@ def display_part3(part3_list, poid):
         st.markdown("**学生：**")
         render_latex_textblock(item["single_dialog"]["user"])
 
-        # === 模型回复三栏 + 分隔线 ===
         col_a, col_mid1, col_b, col_mid2, col_c = st.columns([1, 0.03, 1, 0.03, 1])
         with col_a:
             st.markdown(f"**模型 {model_names[0]} 回复：**")
-            render_latex_textblock(item["single_dialog"][f"model_response_{model_keys[0]}"])
+            render_latex_textblock(item["single_dialog"][real_keys[model_keys[0]]])
         with col_mid1:
             render_vertical_divider()
         with col_b:
             st.markdown(f"**模型 {model_names[1]} 回复：**")
-            render_latex_textblock(item["single_dialog"][f"model_response_{model_keys[1]}"])
+            render_latex_textblock(item["single_dialog"][real_keys[model_keys[1]]])
         with col_mid2:
             render_vertical_divider()
         with col_c:
             st.markdown(f"**模型 {model_names[2]} 回复：**")
-            render_latex_textblock(item["single_dialog"][f"model_response_{model_keys[2]}"])
+            render_latex_textblock(item["single_dialog"][real_keys[model_keys[2]]])
 
         st.markdown("**教师参考回复：**")
         render_latex_textblock(item["single_dialog"]["gt"])
 
         render_part3_scoring(item, poid)
-
         st.markdown("<div style='height: 100px;'></div>", unsafe_allow_html=True)
 
 
@@ -204,12 +205,12 @@ def render_part1_scoring(poid: str):
     }
 
     descriptions = {
-        "整体偏好排序（主观倾向）": "阅读以上三个模型的答疑对话后，假设你需要从中选择一个用于实际学生答疑，请根据你的主观判断，对这三个模型进行偏好排序（排在前面的表示你最倾向选择的模型）。",
+        "整体偏好排序（主观倾向）": "阅读以上三个模型的答疑对话后，假设你需要从中选择一个用于实际学生答疑，请根据你的主观判断，对这三个模型在该问题上的表现进行偏好排序（排在前面的表示你最倾向选择的模型）。可以从讲解的内容是否合适、讲解的方法是否符合日常教学、语言是否简单易懂等方面来考虑。",
         "语言流畅度": "请为上面对话中模型的语言流畅度打分，满分（10）的标准为语言符合语法、表达简洁准确、清晰易懂。",
         "是否指出知识点": "在与学生对话的过程中，模型是否有明显地告知学生该题目涉及的知识点,并且知识点正确，如有则选择1，无则选择0.",
         "知识点内容是否正确": "请判断对话中提及的知识点、概念描述是否都是正确的？是则选择1，否则选择0",
-        "最终答案正确": "请判断对话中，模型给学生提供的最终答案是否正确？（如果对话还没推进到最终答案，则视为没有给出最终答案）是则选择1，否则选择0.",
-        "过程正确": "请判断模型在逐步讲解的过程中，过程正确的部分大致占比多少？比如，如果在讲解中大致正确了一半，或是在一个有两个小问的题目中正确了一个小问，则分数为0.5。",
+        "最终答案正确": "请判断对话中，模型是否给出了最终答案，给学生提供的最终答案是否正确？（如果对话还没推进到最终答案，则视为没有给出最终答案）是则选择1，否则选择0.",
+        "过程正确": "请判断模型在逐步讲解的过程中，过程正确的部分大致占比多少？比如，如果在讲解中大致正确了一半，或是在一个有两个小问的题目中正确了一个小问，则分数为0.5；如果前面的过程全部正确，只有最后答案错误，则分数为0.9。",
         "是否分步讲解": "请判断对话中，模型是否遵循了分步骤对学生进行讲解的原则(每次对话对学生进行下一步的引导)，对学生进行逐步的讲解？是则选择1；如果并未逐步讲解，而是直接给出结果，则选择0.",
         "提问质量": "请你判断在讲解过程中，模型对学生提出的高质量问题的比例大致有多少？类似于“你明白了吗？”“你理解了吗？”等没有给出具体信息的内容，视为低质量提问；有具体引导学生进行下一步计算或者下一个推导步骤的，如“请你试着完成计算”“那么下一步是不是应该...？”视为高质量提问。"
     }
@@ -271,8 +272,6 @@ def render_part1_scoring(poid: str):
             render_vertical_divider()
         with cols[3]:
             render_vertical_divider()
-
-
 
 
 
@@ -446,7 +445,7 @@ def main():
         }
 
     # ========== 加载数据：每位教师一个 JSON ==========
-    file_path = f"data_{teacher_id}.json"
+    file_path = f"data_{teacher_id}_merged_with_dedup_part2_fixed.json"
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -515,30 +514,26 @@ def main():
         teacher_scores = st.session_state.all_scores.get(teacher_id, {})
         all_scores = []
 
+        real_keys = {"A": "DeepSeek-V3", "B": "o4-mini", "C": "Spark_X1"}
+
         # ==== Part1 ====
         for k, v in teacher_scores.get("part1_scores", {}).items():
             poid = k.replace("part1_", "")
             for dim, models in v.items():
                 if dim not in ["语言流畅度", "是否指出知识点", "知识点内容是否正确",
-               "最终答案正确", "过程正确", "是否分步讲解", "提问质量",
-               "整体偏好排序（主观倾向）"]:
-                    continue  # 跳过非当前使用字段（如旧字段）
-                score_a = models.get("A", "")
-                score_b = models.get("B", "")
-                score_c = models.get("C", "")
-                if score_a == "" and score_b == "" and score_c == "":
+                               "最终答案正确", "过程正确", "是否分步讲解", "提问质量",
+                               "整体偏好排序（主观倾向）"]:
                     continue
                 row = {
                     "poid": poid,
                     "part": "part1",
                     "type": dim,
                     "dimension": dim,
-                    "score_A": score_a,
-                    "score_B": score_b,
-                    "score_C": score_c
+                    "score_DeepSeek-V3": models.get("A", ""),
+                    "score_o4-mini": models.get("B", ""),
+                    "score_Spark_X1": models.get("C", "")
                 }
                 all_scores.append(row)
-
 
         # ==== Part2 ====
         type_map = {
@@ -551,35 +546,24 @@ def main():
             part_match = re.match(r"part2_(.*?)_t(\d)_(\d+)", k)
             if part_match:
                 poid_raw, tval, block_idx = part_match.groups()
-                poid_clean = poid_raw.split("_")[0]  # 去掉 _idx 部分，保留 poid
+                poid_clean = poid_raw.split("_")[0]
                 label = f"{type_map.get(tval, '未知类型')}_block{block_idx}"
                 row = {
                     "poid": poid_clean,
                     "part": "part2",
                     "type": label,
                     "dimension": type_map.get(tval, "未知类型"),
-                    "score_A": v.get("A", ""),
-                    "score_B": v.get("B", ""),
-                    "score_C": v.get("C", "")
+                    "score_DeepSeek-V3": v.get("A", ""),
+                    "score_o4-mini": v.get("B", ""),
+                    "score_Spark_X1": v.get("C", "")
                 }
                 all_scores.append(row)
 
-
-
         # ==== Part3 ====
         type_labels_map = {
-            "correct": [
-                "正确理解",
-                "正确反馈"
-            ],
-            "error": [
-                "正确理解",
-                "正确反馈"
-            ],
-            "question": [
-                "正确理解",
-                "正确反馈"
-            ]
+            "correct": ["正确理解", "正确反馈"],
+            "error": ["正确理解", "正确反馈"],
+            "question": ["正确理解", "正确反馈"]
         }
 
         for k, v in teacher_scores.get("part3_scores", {}).items():
@@ -588,7 +572,6 @@ def main():
                 poid, qid, score_type = part_match.groups()
                 score_idx = int(score_type)
 
-                # 获取对话类型
                 q_type = "correct"
                 for sample in data:
                     if sample.get("poid") == poid:
@@ -605,13 +588,11 @@ def main():
                     "part": "part3",
                     "type": q_type,
                     "dimension": dimension_name,
-                    "score_A": v.get("A", ""),
-                    "score_B": v.get("B", ""),
-                    "score_C": v.get("C", "")
+                    "score_DeepSeek-V3": v.get("A", ""),
+                    "score_o4-mini": v.get("B", ""),
+                    "score_Spark_X1": v.get("C", "")
                 }
                 all_scores.append(row)
-
-
 
         df = pd.DataFrame(all_scores)
         csv = df.to_csv(index=False, encoding="utf-8-sig")
@@ -620,6 +601,7 @@ def main():
         filename = f"评分结果_{teacher_id}_{timestamp}.csv"
         href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">📥 点击下载评分表</a>'
         st.markdown(href, unsafe_allow_html=True)
+
 
 
 # 启动
