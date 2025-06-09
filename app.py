@@ -229,15 +229,21 @@ def render_part1_scoring(poid: str):
 
         if control_type == "rank":
             options = model_names
-            default_order = model_names
-            selected = st.multiselect("请按偏好排序（从左到右表示从高到低）", options, default=default_order, key=f"{part1_key}_{dim}")
+            selected = st.multiselect(
+                "请按偏好排序（从左到右表示从高到低）",
+                options,
+                default=[],  # 不再预填
+                key=f"{part1_key}_{dim}"
+            )
             if len(selected) == 3:
                 for idx, mname in enumerate(selected):
                     model_idx = model_names.index(mname)
                     scores[part1_key][dim][model_keys[model_idx]] = 3 - idx
             else:
+                # 未填完则置为 0 并提醒
                 for i in range(3):
                     scores[part1_key][dim][model_keys[i]] = 0
+                st.warning("请完成模型偏好排序（需要选满三个）以保存评分结果。", icon="⚠️")
             continue  # 跳过后续控件布局
 
         cols = st.columns([1, 0.05, 1, 0.05, 1])
@@ -421,15 +427,32 @@ def render_part3_scoring(item, poid):
 
 # ========== 主程序入口 ==========
 def main():
+
+    # 教师ID映射表（前端展示ID -> 实际文件ID）
+    ID_MAPPING = {
+        "T3G9K2B5": "T001",
+        "TA7D8E2F": "T002",
+        "T1XZ4P9Q": "T003",
+        "T8L0M5N2": "T004",
+        "TBC2D7F3": "T005",
+        "T5J9K0H1": "T006"
+    }
     # ========== 入口页：教师编号输入 ==========
     if "teacher_id" not in st.session_state:
         st.title("智能答疑教师评估系统")
-        st.markdown("请输入您的教师编号（例如 T001）：")
+        st.markdown("请输入您的教师编号：")
         teacher_input = st.text_input("教师编号", "")
         if st.button("开始评估") and teacher_input.strip():
-            st.session_state.teacher_id = teacher_input.strip().upper()
-            st.rerun()
+            input_id = teacher_input.strip()
+            if input_id in ID_MAPPING:
+                st.session_state.teacher_id = ID_MAPPING[input_id]
+                st.session_state.display_id = input_id
+                st.rerun()
+            else:
+                st.warning("无效的教师编号，请重新输入。")
+
         return  # 停在编号页
+
 
     teacher_id = st.session_state.teacher_id
 
@@ -445,7 +468,7 @@ def main():
         }
 
     # ========== 加载数据：每位教师一个 JSON ==========
-    file_path = f"data_{teacher_id}_merged_with_dedup_part2_fixed.json"
+    file_path = f"data_{teacher_id}.json"
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -477,7 +500,7 @@ def main():
         st.session_state.model_shuffle_map[idx] = dict(zip(["1", "2", "3"], shuffled))
 
 
-        # 页面导航（顶部 + 跳转）
+    # 页面导航（顶部 + 跳转）
     col1, col2, col3 = st.columns([1, 2, 1])
     with col1:
         if st.button("上一条", key="top_prev") and idx > 0:
@@ -601,6 +624,7 @@ def main():
         filename = f"评分结果_{teacher_id}_{timestamp}.csv"
         href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">📥 点击下载评分表</a>'
         st.markdown(href, unsafe_allow_html=True)
+    
 
 
 

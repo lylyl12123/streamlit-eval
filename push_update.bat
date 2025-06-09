@@ -5,8 +5,8 @@ echo Current directory: %cd%
 :: Add all changes
 git add .
 
-:: Commit with default message
-git commit -m "feat: clean LaTeX and add real data"
+:: Commit with message
+git commit -m "feat: support random teacher ID mapping and validation warning"
 
 :: Push to main branch
 git push origin main
