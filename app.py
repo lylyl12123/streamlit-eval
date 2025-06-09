@@ -326,8 +326,6 @@ def render_part1_scoring(poid: str):
                 render_vertical_divider()
 
 
-
-
 def render_part2_scoring(part2_list, poid):
     teacher_id = st.session_state.teacher_id
     model_names = ["模型1", "模型2", "模型3"]
