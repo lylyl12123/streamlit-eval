@@ -6,7 +6,7 @@ echo Current directory: %cd%
 git add .
 
 :: Commit with message
-git commit -m "feat: support random teacher ID mapping and validation warning"
+git commit -m "feat: update UI"
 
 :: Push to main branch
 git push origin main

@@ -42,42 +42,50 @@ real_keys = {"A": "DeepSeek-V3", "B": "o4-mini", "C": "Spark_X1"}
 # ========== 展示布局的函数 ==========
 def display_part1(part1, poid):
     st.markdown("### 🧩 Part 1: 模型答疑中的整体评价")
-    st.markdown("**题目：**")
-    render_latex_textblock(part1["question"])
-
-    st.markdown("#### 📊 模型 1 / 2 / 3 对该问题的答疑过程")
 
     model_map = st.session_state.model_shuffle_map[st.session_state.page]
     model_keys = [model_map[m] for m in ["1", "2", "3"]]
     model_names = ["模型1", "模型2", "模型3"]
     real_keys = {"A": "DeepSeek-V3", "B": "o4-mini", "C": "Spark_X1"}
     model_turns = [part1.get(real_keys[k], []) for k in model_keys]
-
-    col_a, col_b, col_c = st.columns(3)
-    for col, turns, name in zip([col_a, col_b, col_c], model_turns, model_names):
-        with col:
-            st.markdown(f"#### 🤖 {name}")
-            blocks = []
-            blocks.append(" ")
-            for idx, turn in enumerate(turns):
-                if "user" in turn and idx != 0:
-                    blocks.append(f"<span style='color:#1f77b4; font-weight:bold;'>学生：</span><br>{turn['user']}")
-                if "model_respond" in turn:
-                    blocks.append(f"<span style='color:#d62728; font-weight:bold;'>{name}：</span><br>{turn['model_respond']}")
-                if idx < len(turns) - 1:
-                    blocks.append("---")
-            content = "\n\n".join(blocks)
-            st.markdown(f"""
-            <div style='height: 500px; overflow-y: auto; padding-right:10px; border: 1px solid #ccc; border-radius: 10px; padding: 10px; background-color: #f9f9f9;'>
-            {content}
-            </div>
-            """, unsafe_allow_html=True)
-
+    render_latex_textblock("#### ❓ 问题：")
+    render_latex_textblock(part1["question"])
     if "answer" in part1:
-        render_latex_textblock("##### ✅ 该题正确答案：" + part1["answer"])
+        render_latex_textblock("#### ✅ 该题参考答案：" )
+        render_latex_textblock(part1["answer"])
+    # 创建两栏：左边放对话，右边放评分表单
+    col1, col2 = st.columns([2.5, 1])  # 左宽右窄
 
-    render_part1_scoring(poid)
+    with col1:
+
+        st.markdown("#### 📊 模型 1 / 2 / 3 对该问题的答疑过程")
+
+        cols = st.columns(3)
+        for col, turns, name in zip(cols, model_turns, model_names):
+            with col:
+                st.markdown(f"##### 🤖 {name}")
+                blocks = []
+                blocks.append(" ")
+                for idx, turn in enumerate(turns):
+                    if "user" in turn and idx != 0:
+                        blocks.append(f"<span style='color:#1f77b4; font-weight:bold;'>学生：</span><br>{turn['user']}")
+                    if "model_respond" in turn:
+                        blocks.append(f"<span style='color:#d62728; font-weight:bold;'>{name}：</span><br>{turn['model_respond']}")
+                    if idx < len(turns) - 1:
+                        blocks.append("---")
+                content = "\n\n".join(blocks)
+                st.markdown(f"""
+                <div style='height: 650px; overflow-y: auto; padding-right:10px; border: 1px solid #ccc; border-radius: 10px; padding: 10px; background-color: #f9f9f9;'>
+                {content}
+                </div>
+                """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown("#### ⭐ 评分表单部分")
+        render_part1_scoring(poid)
+
     st.markdown("<div style='height: 100px;'></div>", unsafe_allow_html=True)
+
 
 
 
@@ -152,36 +160,48 @@ def display_part3(part3_list, poid):
 
     model_map = st.session_state.model_shuffle_map[st.session_state.page]
     model_keys = [model_map[m] for m in ["1", "2", "3"]]
-    model_names = ["1", "2", "3"]
+    model_names = ["模型1", "模型2", "模型3"]
     real_keys = {"A": "DeepSeek-V3", "B": "o4-mini", "C": "Spark_X1"}
 
     for item in part3_list:
-        st.markdown(f"**类型：** {item['type']}")
+        # 强调类型
+        st.markdown(f"<div style='font-size: 22px; font-weight: bold; color: #c0392b; background-color: #fdecea; padding: 8px 12px; border-radius: 6px; display: inline-block;'>类型：{item['type']}</div>", unsafe_allow_html=True)
+
+        st.markdown(" ")
         st.markdown("**题目：**")
         render_latex_textblock(item["question"])
-        st.markdown("**学生：**")
-        render_latex_textblock(item["single_dialog"]["user"])
 
+        # 三列展示模型回复（每列一个滑动框，拼接HTML + LaTeX 保留）
         col_a, col_mid1, col_b, col_mid2, col_c = st.columns([1, 0.03, 1, 0.03, 1])
-        with col_a:
-            st.markdown(f"**模型 {model_names[0]} 回复：**")
-            render_latex_textblock(item["single_dialog"][real_keys[model_keys[0]]])
-        with col_mid1:
-            render_vertical_divider()
-        with col_b:
-            st.markdown(f"**模型 {model_names[1]} 回复：**")
-            render_latex_textblock(item["single_dialog"][real_keys[model_keys[1]]])
-        with col_mid2:
-            render_vertical_divider()
-        with col_c:
-            st.markdown(f"**模型 {model_names[2]} 回复：**")
-            render_latex_textblock(item["single_dialog"][real_keys[model_keys[2]]])
+        for col, key, name in zip([col_a, col_b, col_c], model_keys, model_names):
+            with col:
+                st.markdown(f"**{name} 回复：**")
 
-        st.markdown("**教师参考回复：**")
+                model_text = item["single_dialog"][real_keys[key]]
+                user_text = item["single_dialog"]["user"]
+
+                # 拼接 HTML 内容，LaTeX 保留
+                blocks =[]
+                blocks.append("")
+                blocks.append(f"<span style='color:#1f77b4; font-weight:bold;'>学生：</span><br>{user_text}")
+                blocks.append(f"<span style='color:#d62728; font-weight:bold;'>{name}：</span><br>{model_text}")
+
+                content = "\n\n".join(blocks)
+
+                st.markdown(f"""
+                <div style='height: 250px; overflow-y: auto; padding-right:10px;
+                            border: 1px solid #ccc; border-radius: 10px;
+                            padding: 10px; background-color: #f9f9f9;'>
+                {content}
+                </div>
+                """, unsafe_allow_html=True)
+
+        st.markdown("**学生正确参考：**")
         render_latex_textblock(item["single_dialog"]["gt"])
 
         render_part3_scoring(item, poid)
         st.markdown("<div style='height: 100px;'></div>", unsafe_allow_html=True)
+
 
 
 
@@ -205,60 +225,87 @@ def render_part1_scoring(poid: str):
     }
 
     descriptions = {
-        "整体偏好排序（主观倾向）": "阅读以上三个模型的答疑对话后，假设你需要从中选择一个用于实际学生答疑，请根据你的主观判断，对这三个模型在该问题上的表现进行偏好排序（排在前面的表示你最倾向选择的模型）。可以从讲解的内容是否合适、讲解的方法是否符合日常教学、语言是否简单易懂等方面来考虑。",
-        "语言流畅度": "请为上面对话中模型的语言流畅度打分，满分（10）的标准为语言符合语法、表达简洁准确、清晰易懂。",
-        "是否指出知识点": "在与学生对话的过程中，模型是否有明显地告知学生该题目涉及的知识点,并且知识点正确，如有则选择1，无则选择0.",
-        "知识点内容是否正确": "请判断对话中提及的知识点、概念描述是否都是正确的？是则选择1，否则选择0",
-        "最终答案正确": "请判断对话中，模型是否给出了最终答案，给学生提供的最终答案是否正确？（如果对话还没推进到最终答案，则视为没有给出最终答案）是则选择1，否则选择0.",
-        "过程正确": "请判断模型在逐步讲解的过程中，过程正确的部分大致占比多少？比如，如果在讲解中大致正确了一半，或是在一个有两个小问的题目中正确了一个小问，则分数为0.5；如果前面的过程全部正确，只有最后答案错误，则分数为0.9。",
-        "是否分步讲解": "请判断对话中，模型是否遵循了分步骤对学生进行讲解的原则(每次对话对学生进行下一步的引导)，对学生进行逐步的讲解？是则选择1；如果并未逐步讲解，而是直接给出结果，则选择0.",
-        "提问质量": "请你判断在讲解过程中，模型对学生提出的高质量问题的比例大致有多少？类似于“你明白了吗？”“你理解了吗？”等没有给出具体信息的内容，视为低质量提问；有具体引导学生进行下一步计算或者下一个推导步骤的，如“请你试着完成计算”“那么下一步是不是应该...？”视为高质量提问。"
+        "整体偏好排序（主观倾向）": (
+            "📌 阅读以上三个模型的答疑对话后，假设你需要从中选择一个用于实际学生答疑。"
+            "<br><b>请根据主观判断，对三个模型在该问题上的表现进行偏好排序</b>（排在前面的表示你最倾向选择的模型）。"
+            "<br><b>参考维度：</b>讲解内容是否合适、方法是否符合教学、语言是否易懂等。"
+        ),
+        "语言流畅度": (
+            "📌 请为上面对话中模型的语言流畅度打分。"
+            "<br><b>满分（10）标准：</b>语言符合语法、表达简洁准确、清晰易懂。"
+        ),
+        "是否指出知识点": (
+            "📌 模型是否明显告知了该题涉及的知识点，<b>且知识点正确</b>。"
+            "<br><b>选择 1 表示有明确指出，0 表示没有。</b>"
+        ),
+        "知识点内容是否正确": (
+            "📌 判断对话中提及的知识点、概念描述是否<b>都是正确的</b>。"
+            "<br><b>是：1，否：0。</b>"
+        ),
+        "最终答案正确": (
+            "📌 判断模型是否给出了<b>最终答案</b>，以及该答案是否<b>正确</b>。"
+            "<br>如果还没推进到最终答案阶段，<b>视为未给出</b>。"
+            "<br><b>正确：1，不正确或未给出：0。</b>"
+        ),
+        "过程正确": (
+            "📌 判断模型在逐步讲解过程中，<b>正确部分占比</b>是多少。"
+            "<br>例如："
+            "<br>- 正确了一半 → 分数 0.5；"
+            "<br>- 正确两个小问中的一个 → 分数 0.5；"
+            "<br>- 全过程正确但结尾错误 → 分数 0.9。"
+        ),
+        "是否分步讲解": (
+            "📌 判断模型是否<b>遵循分步骤</b>进行讲解，即每轮引导学生推进一步。"
+            "<br><b>是：1，否（直接给结果或跳跃性推导）：0。</b>"
+        ),
+        "提问质量": (
+            "📌 判断模型在讲解过程中提出的<b>高质量问题比例</b>："
+            "<br><b>低质量提问：</b>如“你明白了吗？”“你理解了吗？”"
+            "<br><b>高质量提问：</b>如“请你试着完成计算”“下一步应该怎么做？”"
+            "<br>请评估其在对话中的占比（0~1）。"
+        )
     }
 
     scores = st.session_state.all_scores[teacher_id].setdefault("part1_scores", {})
     part1_key = f"part1_{poid}"
     scores.setdefault(part1_key, {})
 
-    render_latex_textblock("###### 请根据以上内容，根据下列维度评分：")
+    render_latex_textblock("###### 请根据对话内容，根据下列维度评分：")
 
     for i, (dim, control_type) in enumerate(dimensions.items(), start=1):
         scores[part1_key].setdefault(dim, {})  # 防止 KeyError
 
-        st.markdown(f"<span style='font-size: 18px; font-weight: bold;'>（{i}） {dim}</span>", unsafe_allow_html=True)
-        st.markdown(f"<div style='font-size: 16px; padding-left: 1em;'>{descriptions[dim]}</div>", unsafe_allow_html=True)
+        with st.expander(f"（{i}）{dim}", expanded=False):
+            st.markdown(f"<div style='font-size: 16px; padding-left: 1em;'>{descriptions[dim]}</div>", unsafe_allow_html=True)
 
-        if control_type == "rank":
-            options = model_names
-            selected = st.multiselect(
-                "请按偏好排序（从左到右表示从高到低）",
-                options,
-                default=[],  # 不再预填
-                key=f"{part1_key}_{dim}"
-            )
-            if len(selected) == 3:
-                for idx, mname in enumerate(selected):
-                    model_idx = model_names.index(mname)
-                    scores[part1_key][dim][model_keys[model_idx]] = 3 - idx
-            else:
-                # 未填完则置为 0 并提醒
-                for i in range(3):
-                    scores[part1_key][dim][model_keys[i]] = 0
-                st.warning("请完成模型偏好排序（需要选满三个）以保存评分结果。", icon="⚠️")
-            continue  # 跳过后续控件布局
+            if control_type == "rank":
+                options = model_names
+                selected = st.multiselect(
+                    "请按偏好排序（从左到右表示从高到低）",
+                    options,
+                    default=[],  # 不再预填
+                    key=f"{part1_key}_{dim}"
+                )
+                if len(selected) == 3:
+                    for idx, mname in enumerate(selected):
+                        model_idx = model_names.index(mname)
+                        scores[part1_key][dim][model_keys[model_idx]] = 3 - idx
+                else:
+                    for i in range(3):
+                        scores[part1_key][dim][model_keys[i]] = 0
+                    st.warning("请完成模型偏好排序（需要选满三个）以保存评分结果。", icon="⚠️")
+                continue
 
-        cols = st.columns([1, 0.05, 1, 0.05, 1])
-        for j, (col, model_name) in enumerate(zip([cols[0], cols[2], cols[4]], model_names)):
-            key = f"{part1_key}_{dim}_{model_name}"
-            prev_value = scores[part1_key][dim].get(model_keys[j], 0)
+            cols = st.columns([1, 0.05, 1, 0.05, 1])
+            for j, (col, model_name) in enumerate(zip([cols[0], cols[2], cols[4]], model_names)):
+                key = f"{part1_key}_{dim}_{model_name}"
+                prev_value = scores[part1_key][dim].get(model_keys[j], 0)
 
-            with col:
-                subcol1, subcol2 = st.columns([1, 2])
-                with subcol1:
+                with col:
                     st.markdown(
                         f"<div style='text-align: center; padding-top: 0.5rem; font-weight: bold;'>{model_name}</div>",
                         unsafe_allow_html=True
                     )
-                with subcol2:
                     if control_type == "slider_int":
                         st.markdown("<style>div[data-baseweb='slider'] { max-width: 130px; }</style>", unsafe_allow_html=True)
                         val = st.slider("", 0, 10, int(prev_value), step=1, key=key)
@@ -273,11 +320,11 @@ def render_part1_scoring(poid: str):
                         val = 0
                     scores[part1_key][dim][model_keys[j]] = val
 
-        # 插入竖线
-        with cols[1]:
-            render_vertical_divider()
-        with cols[3]:
-            render_vertical_divider()
+            with cols[1]:
+                render_vertical_divider()
+            with cols[3]:
+                render_vertical_divider()
+
 
 
 
@@ -360,16 +407,16 @@ def render_part3_scoring(item, poid):
 
     type_labels_map = {
         "correct": [
-            ("正确理解", "判断模型是否指出学生是回答是正确的，如“你说得对”“回答得很好”等。"),
-            ("正确反馈", "判断模型是否引导学生进行下一步，或是总结正确答案。")
+            ("指出学生回答正确", "判断模型是否指出学生是回答是正确的，如“你说得对”“回答得很好”等。"),
+            ("引导学生进行下一步思考", "判断模型是否引导学生进行下一步，或是总结正确答案。")
         ],
         "error": [
-            ("正确理解", "判断模型是否正面指出学生的回答是错误的。"),
-            ("正确反馈", "判断模型是否正确地改正了学生错误。")
+            ("指出学生回答错误", "判断模型是否正面指出学生的回答是错误的。"),
+            ("纠正或引导纠正学生错误", "判断模型是否正确地改正了学生错误。")
         ],
         "question": [
-            ("正确理解", "判断模型是否回答学生的问题。"),
-            ("正确反馈", "判断模型是否正确回答学生提问。")
+            ("意识到学生在提问", "判断模型是否回答学生的问题。"),
+            ("解决或引导解决问题", "判断模型是否正确回答学生提问。")
         ],
     }
 
@@ -430,6 +477,7 @@ def main():
 
     # 教师ID映射表（前端展示ID -> 实际文件ID）
     ID_MAPPING = {
+        "T000": "T000",
         "T3G9K2B5": "T001",
         "TA7D8E2F": "T002",
         "T1XZ4P9Q": "T003",
