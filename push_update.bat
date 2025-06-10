@@ -6,7 +6,7 @@ echo Current directory: %cd%
 git add .
 
 :: Commit with message
-git commit -m "feat: update UI"
+git commit -m "feat: v2"
 
 :: Push to main branch
 git push origin main

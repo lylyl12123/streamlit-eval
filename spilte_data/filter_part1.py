@@ -53,6 +53,18 @@ progress_text = f"已完成 {st.session_state.page + 1} / {len(question_ids)} �
 st.markdown(f"**{progress_text}**")
 st.progress((st.session_state.page + 1) / len(question_ids))
 
+# ========== 翻页按钮 ==========
+col1, col2, col3 = st.columns([1, 1, 2])
+with col1:
+    if st.button("⬅️ 上一条") and st.session_state.page > 0:
+        st.session_state.page -= 1
+        st.rerun()
+with col2:
+    if st.button("➡️ 下一条") and st.session_state.page < len(question_ids) - 1:
+        st.session_state.page += 1
+        st.rerun()
+
+
 # ========== 显示内容 ==========
 st.markdown(f"### 📌 题目 ID： `{qid}`")
 st.markdown(f"**题目内容：**  \n{entry['DeepSeek-V3']['question']}")
