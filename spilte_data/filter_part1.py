@@ -45,6 +45,17 @@ st.markdown("逐条检查模型对话，选择是否保留")
 if "page" not in st.session_state:
     st.session_state.page = 0
 
+# ========== 按 question_id 跳转 ==========
+with st.form("jump_by_qid"):
+    input_qid = st.text_input("🔍 输入题目 ID 进行跳转", "")
+    submitted = st.form_submit_button("跳转")
+    if submitted:
+        if input_qid in question_ids:
+            st.session_state.page = question_ids.index(input_qid)
+            st.rerun()
+        else:
+            st.warning("未找到对应的题目 ID，请检查输入是否正确。")
+
 qid = question_ids[st.session_state.page]
 entry = filtered_data[qid]
 
@@ -64,12 +75,10 @@ with col2:
         st.session_state.page += 1
         st.rerun()
 
-
 # ========== 显示内容 ==========
 st.markdown(f"### 📌 题目 ID： `{qid}`")
 st.markdown(f"**题目内容：**  \n{entry['DeepSeek-V3']['question']}")
 st.markdown(f"**答案：**  \n{entry['DeepSeek-V3'].get('answer', '（无答案）')}")
-
 
 cols = st.columns(3)
 for i, model in enumerate(["DeepSeek-V3", "o4-mini", "Spark_X1"]):
@@ -90,19 +99,17 @@ st.session_state.selections[qid] = keep
 # ========== 翻页按钮 ==========
 col1, col2, col3 = st.columns([1, 1, 2])
 with col1:
-    if st.button("⬅️ 上一条") and st.session_state.page > 0:
+    if st.button("⬅️ 上一条", key="prev2") and st.session_state.page > 0:
         st.session_state.page -= 1
         st.rerun()
 with col2:
-    if st.button("➡️ 下一条") and st.session_state.page < len(question_ids) - 1:
+    if st.button("➡️ 下一条", key="next2") and st.session_state.page < len(question_ids) - 1:
         st.session_state.page += 1
         st.rerun()
-
 
 # ========== 已选条数显示 ==========
 selected_count = sum(st.session_state.selections.get(qid, False) for qid in question_ids)
 st.markdown(f"📊 已选择对话数：**{selected_count} / {len(question_ids)}**")
-
 
 # ========== 导出按钮 ==========
 st.markdown("---")
