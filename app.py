@@ -166,6 +166,9 @@ def display_part3(part3_list, poid):
         st.markdown("**题目：**")
         render_latex_textblock(item["question"])
 
+        st.markdown("**上轮模型问题：**")
+        render_latex_textblock(item["last_model_reply"])
+
         # 三列展示模型回复（每列一个滑动框，拼接HTML + LaTeX 保留）
         col_a, col_mid1, col_b, col_mid2, col_c = st.columns([1, 0.03, 1, 0.03, 1])
         for col, key, name in zip([col_a, col_b, col_c], model_keys, model_names):
@@ -286,22 +289,48 @@ def render_part1_scoring(poid: str):
             st.markdown(f"<div style='font-size: 16px; padding-left: 1em;'>{descriptions[dim]}</div>", unsafe_allow_html=True)
 
             if control_type == "rank":
-                options = model_names
+                multiselect_key = f"{part1_key}_{dim}_multiselect"  # 加上维度和 poid，确保唯一性
+
+                # ===== 初始化 session_state（首次访问该样本时才初始化） =====
+                if multiselect_key not in st.session_state:
+                    prev_ranks = scores[part1_key].get(dim, {})  # {"A":3, "C":2, "B":1}
+                    if any(prev_ranks.values()):
+                        # 有打分，恢复排序顺序
+                        ranked_models = sorted(prev_ranks.items(), key=lambda x: -x[1])
+                        restored = []
+                        for rk, _ in ranked_models:
+                            if rk in model_keys:
+                                idx = model_keys.index(rk)
+                                restored.append(model_names[idx])
+                        st.session_state[multiselect_key] = restored
+                    else:
+                        st.session_state[multiselect_key] = []  # ✅ 没填过，显式设为空（防止复用前页的值）
+
+                # ===== 渲染 multiselect，使用 key 保留顺序 =====
                 selected = st.multiselect(
                     "请按偏好排序（从左到右表示从高到低）",
-                    options,
-                    default=[],  # 不再预填
-                    key=f"{part1_key}_{dim}"
+                    options=model_names,
+                    key=multiselect_key
                 )
+
+                # ===== 保存评分并标记为已填 =====
                 if len(selected) == 3:
                     for idx, mname in enumerate(selected):
                         model_idx = model_names.index(mname)
                         scores[part1_key][dim][model_keys[model_idx]] = 3 - idx
+                    if "filled_poids_with_rank" not in st.session_state:
+                        st.session_state.filled_poids_with_rank = set()
+                    st.session_state.filled_poids_with_rank.add(poid)
                 else:
                     for i in range(3):
                         scores[part1_key][dim][model_keys[i]] = 0
                     st.warning("请完成模型偏好排序（需要选满三个）以保存评分结果。", icon="⚠️")
+
                 continue
+
+
+
+
 
             cols = st.columns([1, 0.05, 1, 0.05, 1])
             for j, (col, model_name) in enumerate(zip([cols[0], cols[2], cols[4]], model_names)):
@@ -505,22 +534,18 @@ def render_part3_scoring(item, poid):
 
 
 
-
-
-
-
 # ========== 主程序入口 ==========
 def main():
 
     # 教师ID映射表（前端展示ID -> 实际文件ID）
     ID_MAPPING = {
         "T000": "T000",
-        "T3G9K2B5": "T001",
-        "TA7D8E2F": "T002",
-        "T1XZ4P9Q": "T003",
-        "T8L0M5N2": "T004",
-        "TBC2D7F3": "T005",
-        "T5J9K0H1": "T006"
+        "T7900": "T001",
+        "T2698": "T002",
+        "T8347": "T003",
+        "T7567": "T004",
+        "T2131": "T005",
+        "T6286": "T006"
     }
     # ========== 入口页：教师编号输入 ==========
     if "teacher_id" not in st.session_state:
@@ -557,6 +582,11 @@ def main():
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
+            # 构建 poid 到 index 的映射，用于导出时显示“第 x / y 条”
+            poid_to_index_map = {sample["poid"]: i for i, sample in enumerate(data)}
+            st.session_state.poid_to_index_map = poid_to_index_map
+            st.session_state.total_pages = len(data)
+
     except FileNotFoundError:
         st.error(f"未找到编号 {teacher_id} 对应的数据文件：`{file_path}`。请联系管理员。")
         if st.button("重新输入编号"):
@@ -621,19 +651,28 @@ def main():
     if st.button("导出所有评分结果"):
         teacher_scores = st.session_state.all_scores.get(teacher_id, {})
         all_scores = []
+        exported_poids = set()
 
         real_keys = {"A": "DeepSeek-V3", "B": "o4-mini", "C": "Spark_X1"}
+        poid_to_index_map = st.session_state.poid_to_index_map
+        total_pages = st.session_state.total_pages
+        filled_poids = st.session_state.get("filled_poids_with_rank", set())
 
         # ==== Part1 ====
         for k, v in teacher_scores.get("part1_scores", {}).items():
             poid = k.replace("part1_", "")
+            if poid not in filled_poids:
+                continue
+            sample_index = poid_to_index_map.get(poid, -1)
+
             for dim, models in v.items():
                 if dim not in ["语言流畅度", "是否指出知识点", "知识点内容是否正确",
-                               "最终答案正确", "过程正确", "是否分步讲解", "提问质量",
-                               "整体偏好排序（主观倾向）"]:
+                            "最终答案正确", "过程正确", "是否分步讲解", "提问质量",
+                            "整体偏好排序（主观倾向）"]:
                     continue
                 row = {
                     "poid": poid,
+                    "sample_index_display": f"{sample_index + 1} / {total_pages}",
                     "part": "part1",
                     "type": dim,
                     "dimension": dim,
@@ -642,6 +681,8 @@ def main():
                     "score_Spark_X1": models.get("C", "")
                 }
                 all_scores.append(row)
+
+            exported_poids.add(poid)
 
         # ==== Part2 ====
         type_map = {
@@ -655,9 +696,13 @@ def main():
             if part_match:
                 poid_raw, tval, block_idx = part_match.groups()
                 poid_clean = poid_raw.split("_")[0]
+                if poid_clean not in exported_poids:
+                    continue
+                sample_index = poid_to_index_map.get(poid_clean, -1)
                 label = f"{type_map.get(tval, '未知类型')}_block{block_idx}"
                 row = {
                     "poid": poid_clean,
+                    "sample_index_display": f"{sample_index + 1} / {total_pages}",
                     "part": "part2",
                     "type": label,
                     "dimension": type_map.get(tval, "未知类型"),
@@ -678,6 +723,8 @@ def main():
             part_match = re.match(r"part3_(.*?)_(.*?)_score(\d)", k)
             if part_match:
                 poid, qid, score_type = part_match.groups()
+                if poid not in exported_poids:
+                    continue
                 score_idx = int(score_type)
 
                 q_type = "correct"
@@ -691,8 +738,10 @@ def main():
                 labels = type_labels_map.get(q_type, type_labels_map["correct"])
                 dimension_name = labels[score_idx] if score_idx < len(labels) else f"评分项{score_idx}"
 
+                sample_index = poid_to_index_map.get(poid, -1)
                 row = {
                     "poid": poid,
+                    "sample_index_display": f"{sample_index + 1} / {total_pages}",
                     "part": "part3",
                     "type": q_type,
                     "dimension": dimension_name,
@@ -702,6 +751,7 @@ def main():
                 }
                 all_scores.append(row)
 
+        # ==== 导出文件 ====
         df = pd.DataFrame(all_scores)
         csv = df.to_csv(index=False, encoding="utf-8-sig")
         b64 = base64.b64encode(csv.encode("utf-8-sig")).decode()
@@ -709,6 +759,8 @@ def main():
         filename = f"评分结果_{teacher_id}_{timestamp}.csv"
         href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">📥 点击下载评分表</a>'
         st.markdown(href, unsafe_allow_html=True)
+
+
     
 
 

@@ -6,7 +6,7 @@ echo Current directory: %cd%
 git add .
 
 :: Commit with message
-git commit -m "feat: v2"
+git commit -m "feat:ensure ranking field only saves when filled and correctly restores on page return"
 
 :: Push to main branch
 git push origin main
